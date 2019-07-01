@@ -1,0 +1,418 @@
+#
+# Copyright (c) 2018, Manfred Constapel
+# This file is licensed under the terms of the MIT license.
+#
+
+#
+# abstract plot support
+#
+
+import sys, time, threading, json, queue, serial, datetime
+
+import numpy as np
+
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+
+from mpl_toolkits.mplot3d import art3d
+
+# ------------------------------------------------------------------------------------------- #
+
+def set_aspect_equal_3d(ax):  # axis have to be equal 
+
+    xlim = ax.get_xlim3d()
+    ylim = ax.get_ylim3d()
+    zlim = ax.get_zlim3d()
+
+    xmean = np.mean(xlim)
+    ymean = np.mean(ylim)
+    zmean = np.mean(zlim)
+
+    plot_radius = max([abs(lim - mean_) for lims, mean_ in ((xlim, xmean), (ylim, ymean), (zlim, zmean)) for lim in lims])
+
+    ax.set_xlim3d([xmean - plot_radius, xmean + plot_radius])
+    ax.set_ylim3d([ymean - plot_radius, ymean + plot_radius])
+    ax.set_zlim3d([zmean - plot_radius, zmean + plot_radius])
+
+
+def move_figure(fig, xy):
+    backend = mpl.get_backend()
+    if backend == 'TkAgg':
+        fig.canvas.manager.window.wm_geometry("+%d+%d" % xy)
+    elif backend == 'WXAgg':
+        fig.canvas.manager.window.SetPosition(xy)
+    else:  # QT and GTK
+        fig.canvas.manager.window.move(*xy)
+
+# ------------------------------------------------------------------------------------------- #
+
+
+# ----- Some numbers about payload manipulation ----- #
+# Now this only support packet with 1 TLV and azimuth heat map specific.
+# 
+
+PAYLOAD_START = 44
+PAYLOAD_TRUNC = 0.375
+PAYLOAD_SIZE_DEFAULT = 8192
+PAYLOAD_SIZE = int(PAYLOAD_SIZE_DEFAULT * PAYLOAD_TRUNC)
+PACKET_SIZE = PAYLOAD_START + PAYLOAD_SIZE
+
+# ----- Name of device ----- #
+
+device_name = '/dev/tty.usbmodem000000004'
+
+# ----- File name of log ----- #
+
+filename = ""
+
+# ----- Magic Word ----- #
+magic_word = "0201040306050807"
+
+# ----- The header of the packet ----- #
+header = {
+    'VERSION' : 8,
+    'PACKETLEN' : 12,
+    'PLATFORM' : 16,
+    'FRAMENUMBER' : 20,
+    'CPUCYCLE' : 24,
+    'DETECTOBJ' : 28,
+    'NUMTLV' : 32
+}
+
+# ----- The header of the TLV ----- #
+tlvheader = {
+    'TLVTYPE' : 36,
+    'TLVLEN' : 40
+}
+
+
+# ----- The frame here is the frame displayed on GUI, not chirp frame ----- #
+frame_count = 0
+
+# ----- Global variables for storing data ----- #
+# bytevec: store all of the packet parsed.
+# datavec: store all the phasor tuples. Every real & imaginary part consists of two bytes.
+# datamap: to meet the requirement of update() in plot_range_azimuth_heat_map.py
+
+bytevec = []
+datavec = []
+datamap = {
+    'azimuth' : datavec
+}
+
+# ------------------------------------------------------------------------------------------- #
+
+# ----- Thread: Read data from serial ----- #
+# ----- Serial reading helper function ----- #
+def from_serial(filename, chunksize=PACKET_SIZE-8):
+    with filename as f:
+        pattern = ""
+        count = 0
+        while True:
+            c = f.read(1)
+            if count > 5000:
+                print("magic word search out of control")
+                return
+            if not c:
+                break
+            if pattern == "" or len(pattern) < 16:
+                pattern += c.hex()
+            else:
+                pattern = pattern[2:16]
+                pattern += c.hex()
+
+            if pattern == magic_word:
+                #print("match: " + pattern)
+                for it in range(0,16,2):
+                    b = pattern[it] + pattern[it+1]
+                    yield int(b)
+                
+                chunk = f.read(chunksize)
+                for b in chunk:
+                    yield b
+                
+                return
+            count += 1
+
+# ----- Thread: Read data from serial ----- #
+# ----- Verify byte vec helper function ----- #
+def verify_vec(vec):
+    if len(vec) != PACKET_SIZE:
+        print("[serial-on-the-fly] len of serialvec: " + str(len(vec)))
+        return False
+    """ 
+    pattern = ""
+    for i in range(0,8):
+        pattern += vec[i].hex()
+    if not pattern == magic_word :
+        print("[verify] pattern not matched: " + pattern)
+        return False
+    
+
+    count = 8
+    for i in range(8,len(vec)):
+        pattern = pattern[2:16]
+        pattern += vec[i].hex()
+        if pattern == magic_word:
+            print("[verify] shall not match twice! at: " + str(count))
+            return False
+        count += 1 """
+
+    return True
+
+total_count = 0
+fail_count = 0
+# ----- Thread: Read data from serial ----- #
+# ----- Read from serial on-the-fly ----- #
+def serial_on_the_fly(fig, q, loggingQueue):
+    global total_count, fail_count
+    f = serial.Serial(device_name, 961200, timeout=1)
+    while q.alive:
+        serialvec = []
+        for b in from_serial(f):
+            serialvec.append(bytes([b]))
+
+        if not verify_vec(serialvec):
+            fail_count += 1
+            total_count += 1
+            print("[serial-on-the-fly] failed: " + str(round(100 * fail_count/total_count, 2)) + " % failed")
+            continue
+        total_count += 1
+        q.put(serialvec)
+        loggingQueue.put(serialvec)
+        print("[serial-on-the-fly] serialvec enqueued! size: " + str(len(serialvec)))
+        #time.sleep(0.001)
+
+# ------------------------------------------------------------------------------------------- #
+# ----- Thread: Save to local filesystem ----- #
+# ----- Get bytevec or datavec from queues ----- #
+def background_Logging(bytevecQueue, datavecQueue):
+    ts = time.time()
+    timestamp = datetime.datetime.fromtimestamp(ts).strftime('%Y-%m-%d-%H-%M-%S')
+    while bytevecQueue.alive and datavecQueue.alive:
+        if not bytevecQueue.empty():
+            binary_data = bytevecQueue.get()
+            write_byte_to_log(binary_data, timestamp)
+        if not datavecQueue.empty():
+            integer_data = datavecQueue.get()
+            write_int_to_log(integer_data, timestamp)
+    
+def write_byte_to_log(binary_data, timestamp):
+    filename = "binary-" + timestamp
+    with open(filename, "ab") as f:
+        for byte in binary_data:
+            f.write(byte)
+        f.close()
+
+def write_int_to_log(integer_data, timestamp):
+    filename = "integer-" + timestamp
+    with open(filename, "a") as f:
+        for integer in integer_data:
+            f.write(integer)
+            f.write(',')
+        f.write('\n')
+        f.close()
+
+
+# ------------------------------------------------------------------------------------------- #
+
+# ----- Thread: updating the plot ----- #
+# ----- Process bytevec to datavec ----- #
+def collect_data(start,end):
+    global datavec
+    datavec.clear()
+    count = 0
+    first , second = 0 , 0
+
+    for byteindex in range(start,end,2):
+        intbyte = bytevec[byteindex] + bytevec[byteindex + 1]
+        byteint = int.from_bytes(intbyte, byteorder='little', signed=True)
+        if count % 2 == 0:
+            first = byteint
+        if count % 2 == 1:
+            second = byteint
+            datavec.append(second)
+            datavec.append(first)
+        count += 1
+
+# ----- Thread: updating the plot ----- #
+# ----- Update the plot ----- #
+def update_plot(fig, q, func, loggingQueue):
+    
+    count = 0
+    
+    while q.alive:
+        global frame_count
+        global bytevec        
+        # 
+        # When having a complete packet, turn that into datavec and pass it back to update()
+        # Stops when the rest of file size is not long enough for another packet
+        #
+        if not q.empty():
+            bytevec = q.get()
+            q.task_done()
+            start = PAYLOAD_START
+            end = PAYLOAD_START + PAYLOAD_SIZE
+            collect_data(start,end)
+            loggingQueue.put(datavec)
+            func(datamap)
+            #print("[update_plot] len of datamap['azimuth']: " + str(len(datamap['azimuth'])))
+            #print("[update_plot] queue size: " + str(q.qsize()))
+
+            frame_count += 1
+        else:
+            time.sleep(1e-6)
+            continue
+
+        try:
+            fig.canvas.draw_idle()
+            fig.canvas.set_window_title("frame: " + str(count))
+            count += 1
+            time.sleep(1e-6)
+        except:
+            q.alive = False
+
+
+# ------------------------------------------------------------------------------------------- #
+# ----- Spawning threads: data from serial ----- #
+queueMax = 1
+def start_plot(fig, ax, func):
+    
+    plt.show(block=False)
+
+    bytevecQueue = queue.Queue(queueMax)
+    bytevecQueue.alive = True
+
+    byteveclogging = queue.Queue(1)
+    dataveclogging = queue.Queue(1)
+    byteveclogging.alive = True
+    dataveclogging.alive = True
+
+    # The first thread is to get data from serial and put it in byte vector queue
+    tu = threading.Thread(target=serial_on_the_fly, args=(fig,bytevecQueue, byteveclogging))
+    tu.daemon = True
+    tu.start()
+
+    # The second thread will get data from queue when available.
+    # Then construct complex number array, put it in datamap and pass it back to main script for plotting.
+    threading.Thread(target=update_plot, args=(fig, bytevecQueue, func, dataveclogging)).start()
+    
+    # The third thread will log the bytevec and datavec with the starting timestamp
+    threading.Thread(target=background_Logging, args=(byteveclogging, dataveclogging)).start()
+    
+    
+    plt.show(block=True)
+    bytevecQueue.alive = False
+    byteveclogging.alive = False
+    dataveclogging.alive = False
+
+# ------------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------------- #
+
+# ----- Spawning threads: data from file ----- #
+queueMax = 1
+def replay_plot(fig, ax, func, filepath):
+    global filename, PAYLOAD_SIZE, PACKET_SIZE
+    filename = filepath
+    print("filename: " + filename)
+    print("PAYLOAD_TRUNC: " + str(PAYLOAD_TRUNC))
+    """ PAYLOAD_SIZE = int(PAYLOAD_SIZE_DEFAULT * PAYLOAD_TRUNC)
+    PACKET_SIZE = PAYLOAD_START + PAYLOAD_SIZE """
+
+    plt.show(block=False)
+
+    init()
+
+    bytevecQueue = queue.Queue(queueMax)
+    bytevecQueue.alive = True
+
+    # The thread will get data from queue when available.
+    # Then construct complex number array, put it in datamap and pass it back to main script for plotting.
+    threading.Thread(target=update_plot_from_file, args=(fig, bytevecQueue, func)).start()
+    #update_plot_from_file(fig, bytevecQueue, func)
+    
+    
+    plt.show(block=True)
+    bytevecQueue.alive = False
+
+# ------------------------------------------------------------------------------------------- #
+# ----- Thread: Replay plot ----- #
+# ----- Read bytes from log file ----- #
+def bytes_from_log(filename, chunksize=PACKET_SIZE-8):
+    with open(filename, "rb") as f:
+        pattern = ""
+        count = 0
+        while True:
+            c = f.read(1)
+            if not c:
+                break
+            if pattern == "" or len(pattern) < 16:
+                pattern += c.hex()
+            else:
+                pattern = pattern[2:16]
+                pattern += c.hex()
+
+            if pattern == magic_word:
+                #print("match: " + pattern)
+                for it in range(0,16,2):
+                    b = pattern[it] + pattern[it+1]
+                    yield int(b)
+
+                chunk = f.read(chunksize)
+                for b in chunk:
+                    yield b
+                
+                pattern = ""
+
+# ----- Thread: Replay plot ----- #
+# ----- prepare the bytevec ----- #
+def init():
+    global bytevec
+    for b in bytes_from_log(filename):
+        bytevec.append(bytes([b]))
+
+    print("len of bytevec: " + str(len(bytevec)))
+    print("type of element: " + str(type(bytevec[0])))
+
+# ----- Thread: Replay plot ----- #
+# ----- Update the plot from log ----- #
+def update_plot_from_file(fig, q, func):
+    
+    count = 0
+
+    while q.alive:
+        global frame_count
+        global bytevec
+        #print("count " + str(count))
+        # 
+        # When having a complete packet, turn that into datavec and pass it back to update()
+        # Stops when the rest of file size is not long enough for another packet
+        #
+        if frame_count * PACKET_SIZE + PAYLOAD_START + PAYLOAD_SIZE <= len(bytevec):
+            start = frame_count * PACKET_SIZE + PAYLOAD_START
+            end = frame_count * PACKET_SIZE + PAYLOAD_START + PAYLOAD_SIZE
+            collect_data(start,end)
+
+            timer_start = time.time()
+            func(datamap)
+            print ("it took %fs for update_map()"%(time.time() - timer_start))
+
+            print("[update_plot] len of datamap['azimuth']: " + str(len(datamap['azimuth'])))
+            frame_count += 1 
+        else:
+            print("[update_plot] wait for data...")
+            time.sleep(1)
+            continue
+            
+
+        try:
+            fig.canvas.draw_idle()
+            count += 1
+            fig.canvas.set_window_title("frame: " + str(count))
+            time.sleep(1e-4)
+        except:
+            print("something fails here")
+            q.alive = False
+        
+
