@@ -137,6 +137,7 @@ def from_serial(filename, chunksize=PACKET_SIZE-8):
 # ----- Thread: Read data from serial ----- #
 # ----- Verify byte vec helper function ----- #
 def verify_vec(vec):
+    global PACKET_SIZE
     if len(vec) != PACKET_SIZE:
         print("[serial-on-the-fly] len of serialvec: " + str(len(vec)))
         return False
@@ -165,11 +166,11 @@ fail_count = 0
 # ----- Thread: Read data from serial ----- #
 # ----- Read from serial on-the-fly ----- #
 def serial_on_the_fly(fig, q, loggingQueue):
-    global total_count, fail_count
+    global total_count, fail_count, PACKET_SIZE
     f = serial.Serial(device_name, 961200, timeout=1)
-    while q.alive:
+    while q.alive and loggingQueue.alive:
         serialvec = []
-        for b in from_serial(f):
+        for b in from_serial(f, PACKET_SIZE - 8):
             serialvec.append(bytes([b]))
 
         if not verify_vec(serialvec):
@@ -181,7 +182,7 @@ def serial_on_the_fly(fig, q, loggingQueue):
         q.put(serialvec)
         loggingQueue.put(serialvec)
         print("[serial-on-the-fly] serialvec enqueued! size: " + str(len(serialvec)))
-        #time.sleep(0.001)
+        time.sleep(1e-6) # yield the interest of scheduler
 
 # ------------------------------------------------------------------------------------------- #
 # ----- Thread: Save to local filesystem ----- #
@@ -192,30 +193,31 @@ def background_Logging(bytevecQueue, datavecQueue):
     while bytevecQueue.alive and datavecQueue.alive:
         if not bytevecQueue.empty():
             binary_data = bytevecQueue.get()
+            bytevecQueue.task_done()
             write_byte_to_log(binary_data, timestamp)
-        if not datavecQueue.empty():
-            integer_data = datavecQueue.get()
-            write_int_to_log(integer_data, timestamp)
+        # if not datavecQueue.empty():
+        #     integer_data = datavecQueue.get()
+        #     write_int_to_log(integer_data, timestamp)
+        time.sleep(1e-6) # yield the interest of scheduler
     
 def write_byte_to_log(binary_data, timestamp):
-    filename = "binary-" + timestamp
+    filename = "DATA/binary-" + timestamp + ".dat"
     with open(filename, "ab") as f:
         for byte in binary_data:
             f.write(byte)
         f.close()
 
 def write_int_to_log(integer_data, timestamp):
-    filename = "integer-" + timestamp
+    filename = "DATA/integer-" + timestamp + ".dat"
     with open(filename, "a") as f:
         for integer in integer_data:
-            f.write(integer)
+            f.write(str(integer))
             f.write(',')
         f.write('\n')
         f.close()
 
 
 # ------------------------------------------------------------------------------------------- #
-
 # ----- Thread: updating the plot ----- #
 # ----- Process bytevec to datavec ----- #
 def collect_data(start,end):
@@ -254,30 +256,41 @@ def update_plot(fig, q, func, loggingQueue):
             start = PAYLOAD_START
             end = PAYLOAD_START + PAYLOAD_SIZE
             collect_data(start,end)
-            loggingQueue.put(datavec)
+            #loggingQueue.put(datavec)
             func(datamap)
             #print("[update_plot] len of datamap['azimuth']: " + str(len(datamap['azimuth'])))
             #print("[update_plot] queue size: " + str(q.qsize()))
 
             frame_count += 1
         else:
-            time.sleep(1e-6)
+            time.sleep(1e-6) # yield the interest of scheduler
             continue
 
         try:
             fig.canvas.draw_idle()
             fig.canvas.set_window_title("frame: " + str(count))
             count += 1
-            time.sleep(1e-6)
+            time.sleep(1e-6) # yield the interest of scheduler
         except:
             q.alive = False
 
 
 # ------------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------------- #
 # ----- Spawning threads: data from serial ----- #
 queueMax = 1
 def start_plot(fig, ax, func):
     
+    global PAYLOAD_SIZE, PACKET_SIZE, PAYLOAD_TRUNC
+    PAYLOAD_SIZE = int(PAYLOAD_SIZE_DEFAULT * PAYLOAD_TRUNC)
+    PACKET_SIZE = PAYLOAD_START + PAYLOAD_SIZE
+    print("PAYLOAD_SIZE_DEFAULT: " + str(PAYLOAD_SIZE_DEFAULT))
+    print("PAYLOAD_TRUNC: " + str(PAYLOAD_TRUNC))
+    print("PAYLOAD_SIZE: " + str(PAYLOAD_SIZE))
+    print("PACKET_SIZE: " + str(PACKET_SIZE))
+
     plt.show(block=False)
 
     bytevecQueue = queue.Queue(queueMax)
@@ -289,16 +302,18 @@ def start_plot(fig, ax, func):
     dataveclogging.alive = True
 
     # The first thread is to get data from serial and put it in byte vector queue
-    tu = threading.Thread(target=serial_on_the_fly, args=(fig,bytevecQueue, byteveclogging))
-    tu.daemon = True
-    tu.start()
+    serial_thread = threading.Thread(target=serial_on_the_fly, args=(fig,bytevecQueue, byteveclogging))
+    serial_thread.daemon = True
+    serial_thread.start()
 
-    # The second thread will get data from queue when available.
+    # The second thread will log the bytevec and datavec with the starting timestamp
+    logging_thread = threading.Thread(target=background_Logging, args=(byteveclogging, dataveclogging))
+    logging_thread.daemon = True
+    logging_thread.start()
+
+    # The third thread will get data from queue when available.
     # Then construct complex number array, put it in datamap and pass it back to main script for plotting.
     threading.Thread(target=update_plot, args=(fig, bytevecQueue, func, dataveclogging)).start()
-    
-    # The third thread will log the bytevec and datavec with the starting timestamp
-    threading.Thread(target=background_Logging, args=(byteveclogging, dataveclogging)).start()
     
     
     plt.show(block=True)
@@ -307,18 +322,19 @@ def start_plot(fig, ax, func):
     dataveclogging.alive = False
 
 # ------------------------------------------------------------------------------------------- #
-# ------------------------------------------------------------------------------------------- #
-# ------------------------------------------------------------------------------------------- #
-
 # ----- Spawning threads: data from file ----- #
 queueMax = 1
 def replay_plot(fig, ax, func, filepath):
-    global filename, PAYLOAD_SIZE, PACKET_SIZE
+    global filename
     filename = filepath
-    print("filename: " + filename)
+
+    global PAYLOAD_SIZE, PACKET_SIZE, PAYLOAD_TRUNC
+    PAYLOAD_SIZE = int(PAYLOAD_SIZE_DEFAULT * PAYLOAD_TRUNC)
+    PACKET_SIZE = PAYLOAD_START + PAYLOAD_SIZE
+    print("PAYLOAD_SIZE_DEFAULT: " + str(PAYLOAD_SIZE_DEFAULT))
     print("PAYLOAD_TRUNC: " + str(PAYLOAD_TRUNC))
-    """ PAYLOAD_SIZE = int(PAYLOAD_SIZE_DEFAULT * PAYLOAD_TRUNC)
-    PACKET_SIZE = PAYLOAD_START + PAYLOAD_SIZE """
+    print("PAYLOAD_SIZE: " + str(PAYLOAD_SIZE))
+    print("PACKET_SIZE: " + str(PACKET_SIZE))
 
     plt.show(block=False)
 
@@ -336,6 +352,9 @@ def replay_plot(fig, ax, func, filepath):
     plt.show(block=True)
     bytevecQueue.alive = False
 
+# ------------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------------- #
+# ------------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------------- #
 # ----- Thread: Replay plot ----- #
 # ----- Read bytes from log file ----- #

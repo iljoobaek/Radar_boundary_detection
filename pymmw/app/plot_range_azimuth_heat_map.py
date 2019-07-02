@@ -40,8 +40,8 @@ def onclick(event):
     global cm_max
     if event.button == 3:  # toggle scale of data
         print("raise cm max 1000")
-        cm_max += 1000
-        if cm_max > 10000:
+        cm_max += 4000
+        if cm_max > 23000:
             print("cm max back to 3000")
             cm_max = 3000
         pass
@@ -84,6 +84,7 @@ def update(data):
     cm.set_array(zi[::-1,::-1])  # rotate 180 degrees
     print ("it took %fs for rotate 180 degrees"%(time.time() - timer_start))
 
+    global cm_max
     if heat_mode[heat_choice] == 'rel':
         cm.autoscale()  # reset colormap
     elif heat_mode[heat_choice] == 'abs':
@@ -110,7 +111,7 @@ if __name__ == "__main__":
 
     # 1st 2: phasors' real and imaginary part
     # 2nd 2: 2 bytes each for real and imaginary part
-    plot.PAYLOAD_SIZE_DEFAULT = range_bins * tx_azimuth_antennas * rx_antennas * 2 * 2
+    plot.PAYLOAD_SIZE_DEFAULT = int((range_bins / float(sys.argv[8])) * tx_azimuth_antennas * rx_antennas * 2 * 2)
     
     range_res = float(sys.argv[5])
     range_bias = float(sys.argv[6])
