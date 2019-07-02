@@ -56,6 +56,7 @@ PAYLOAD_TRUNC = 0.375
 PAYLOAD_SIZE_DEFAULT = 8192
 PAYLOAD_SIZE = int(PAYLOAD_SIZE_DEFAULT * PAYLOAD_TRUNC)
 PACKET_SIZE = PAYLOAD_START + PAYLOAD_SIZE
+PACKET_SIZE_DEFAULT = PAYLOAD_START + PAYLOAD_SIZE_DEFAULT
 
 # ----- Name of device ----- #
 
@@ -170,16 +171,16 @@ def serial_on_the_fly(fig, q, loggingQueue):
     f = serial.Serial(device_name, 961200, timeout=1)
     while q.alive and loggingQueue.alive:
         serialvec = []
-        for b in from_serial(f, PACKET_SIZE - 8):
+        for b in from_serial(f, PACKET_SIZE_DEFAULT - 8):
             serialvec.append(bytes([b]))
 
-        if not verify_vec(serialvec):
+        if not verify_vec(serialvec[:PACKET_SIZE]):
             fail_count += 1
             total_count += 1
             print("[serial-on-the-fly] failed: " + str(round(100 * fail_count/total_count, 2)) + " % failed")
             continue
         total_count += 1
-        q.put(serialvec)
+        q.put(serialvec[:PACKET_SIZE])
         loggingQueue.put(serialvec)
         print("[serial-on-the-fly] serialvec enqueued! size: " + str(len(serialvec)))
         time.sleep(1e-6) # yield the interest of scheduler
