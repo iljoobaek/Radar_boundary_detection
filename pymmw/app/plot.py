@@ -7,7 +7,7 @@
 # abstract plot support
 #
 
-import sys, time, threading, json, queue, serial, datetime
+import sys, time, threading, json, queue, serial, datetime, cv2
 
 import numpy as np
 
@@ -64,7 +64,7 @@ device_name = '/dev/tty.usbmodem000000004'
 
 # ----- File name of log ----- #
 
-filename = ""
+filename = "/Users/wcchung/OneDrive/Main/17699/TI SDK/Radar_boundary_detection/pymmw/app/DATA/binary-2019-07-02-16-57-54.dat"
 
 # ----- Magic Word ----- #
 magic_word = "0201040306050807"
@@ -242,7 +242,7 @@ def collect_data(start,end):
 # ----- Update the plot ----- #
 def update_plot(fig, q, func, loggingQueue):
     
-    count = 0
+    #count = 0
     
     while q.alive:
         global frame_count
@@ -269,8 +269,8 @@ def update_plot(fig, q, func, loggingQueue):
 
         try:
             fig.canvas.draw_idle()
-            fig.canvas.set_window_title("frame: " + str(count))
-            count += 1
+            fig.canvas.set_window_title("frame: " + str(frame_count))
+            
             time.sleep(1e-6) # yield the interest of scheduler
         except:
             q.alive = False
@@ -327,7 +327,7 @@ def start_plot(fig, ax, func):
 queueMax = 1
 def replay_plot(fig, ax, func, filepath):
     global filename
-    filename = filepath
+    #filename = filepath
 
     global PAYLOAD_SIZE, PACKET_SIZE, PAYLOAD_TRUNC
     PAYLOAD_SIZE = int(PAYLOAD_SIZE_DEFAULT * PAYLOAD_TRUNC)
@@ -338,20 +338,19 @@ def replay_plot(fig, ax, func, filepath):
     print("PACKET_SIZE: " + str(PACKET_SIZE))
 
     plt.show(block=False)
+    #plt.show()
 
+    timer_start = time.time()
     init()
-
-    bytevecQueue = queue.Queue(queueMax)
-    bytevecQueue.alive = True
+    print ("it took %fs for init()"%(time.time() - timer_start))
 
     # The thread will get data from queue when available.
     # Then construct complex number array, put it in datamap and pass it back to main script for plotting.
-    threading.Thread(target=update_plot_from_file, args=(fig, bytevecQueue, func)).start()
+    threading.Thread(target=update_plot_from_file, args=(fig, func)).start()
     #update_plot_from_file(fig, bytevecQueue, func)
     
     
     plt.show(block=True)
-    bytevecQueue.alive = False
 
 # ------------------------------------------------------------------------------------------- #
 # ------------------------------------------------------------------------------------------- #
@@ -389,7 +388,7 @@ def bytes_from_log(filename, chunksize=PACKET_SIZE-8):
 # ----- prepare the bytevec ----- #
 def init():
     global bytevec
-    for b in bytes_from_log(filename):
+    for b in bytes_from_log(filename, PACKET_SIZE_DEFAULT - 8):
         bytevec.append(bytes([b]))
 
     print("len of bytevec: " + str(len(bytevec)))
@@ -397,29 +396,28 @@ def init():
 
 # ----- Thread: Replay plot ----- #
 # ----- Update the plot from log ----- #
-def update_plot_from_file(fig, q, func):
+def update_plot_from_file(fig, func):
     
     count = 0
 
-    while q.alive:
+    while True:
         global frame_count
         global bytevec
-        #print("count " + str(count))
         # 
         # When having a complete packet, turn that into datavec and pass it back to update()
         # Stops when the rest of file size is not long enough for another packet
         #
-        if frame_count * PACKET_SIZE + PAYLOAD_START + PAYLOAD_SIZE <= len(bytevec):
-            start = frame_count * PACKET_SIZE + PAYLOAD_START
-            end = frame_count * PACKET_SIZE + PAYLOAD_START + PAYLOAD_SIZE
+        if frame_count * PACKET_SIZE_DEFAULT + PAYLOAD_START + PAYLOAD_SIZE <= len(bytevec):
+            start = frame_count * PACKET_SIZE_DEFAULT + PAYLOAD_START
+            end = frame_count * PACKET_SIZE_DEFAULT + PAYLOAD_START + PAYLOAD_SIZE
             collect_data(start,end)
 
             timer_start = time.time()
             func(datamap)
+            
             print ("it took %fs for update_map()"%(time.time() - timer_start))
-
             print("[update_plot] len of datamap['azimuth']: " + str(len(datamap['azimuth'])))
-            frame_count += 1 
+            frame_count += 1
         else:
             print("[update_plot] wait for data...")
             time.sleep(1)
@@ -429,10 +427,10 @@ def update_plot_from_file(fig, q, func):
         try:
             fig.canvas.draw_idle()
             count += 1
-            fig.canvas.set_window_title("frame: " + str(count))
-            time.sleep(1e-4)
+            fig.canvas.set_window_title("frame: " + str(frame_count))
+            time.sleep(1e-6)
         except:
             print("something fails here")
-            q.alive = False
+            break
         
 

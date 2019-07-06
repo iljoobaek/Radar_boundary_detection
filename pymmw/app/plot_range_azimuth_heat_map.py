@@ -7,7 +7,10 @@
 # azimuth-range FFT heatmap - 2D plot
 #
 
-import os, sys
+import os, sys, copy
+import cv2 as cv
+import random as rng
+rng.seed(12345)
 import tkinter as tk
 from tkinter import filedialog
 
@@ -33,27 +36,70 @@ except ImportError:
 
 # ------------------------------------------------
 
-cm_max = 3000
+cm_max = 1500
+threshold = 1000
+contour = False
 def onclick(event):
-    
+    global cm_max, threshold, heat_choice, contour
+
     # right click
-    global cm_max
-    if event.button == 3:  # toggle scale of data
-        print("raise cm max 1000")
-        cm_max += 4000
-        if cm_max > 23000:
-            print("cm max back to 3000")
-            cm_max = 3000
-        pass
-    
+    if event.button == 3:
+        # for replay: raise up threshold 500. Maximum threshold: 3500
+        if sys.argv[9] == 'read':
+            threshold += 500
+            if threshold > 3500:
+                threshold = 1000
+        # for serial realtime: toggle color range of heatmap
+        if sys.argv[9] == 'serial':
+            # Contour off: raise the colormap maximum
+            if not contour:
+                cm_max += 2000
+                if cm_max > 10000:
+                    cm_max = 1500
+            # Contour on: raise up threshold 500. Maximum threshold: 3500
+            else:
+                threshold += 500
+                if threshold > 3500:
+                    threshold = 1000
+
     # left click
-    if event.button == 1:  # toggle color range of heatmap
-        global heat_choice
-        heat_choice += 1
-        heat_choice %= len(heat_mode)
+    if event.button == 1:  
+        # for replay: fast forward 100 frames
+        if sys.argv[9] == 'read':
+            plot.frame_count += 100
+        # for serial realtime: toggle contour drawing
+        if sys.argv[9] == 'serial':
+            if not contour:
+                # Turn on contour
+                threshold = 1000
+                contour = True
+            else:
+                # Turn off contour
+                contour = False
+                cm_max = 1500
         
     return (event.xdata, event.ydata)
 
+
+def contour_rectangle(zi):
+    zi_copy = np.uint8(zi)
+    canny_output = cv.Canny(zi_copy, 100, 100 * 2)
+    contours, _ = cv.findContours(canny_output, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
+    contours_poly = [None]*len(contours)
+    boundRect = [None]*len(contours)
+    for i, c in enumerate(contours):
+        contours_poly[i] = cv.approxPolyDP(c, 0.01, True)
+        #print("shape of contour_poly[" + str(i) + "] " + str(contours_poly[i].shape))
+        boundRect[i] = cv.boundingRect(contours_poly[i])
+
+    drawing = np.zeros((canny_output.shape[0], canny_output.shape[1], 4), dtype=np.uint8)
+
+    for i in range(len(contours)):
+        color = (rng.randint(0,256), rng.randint(0,256), rng.randint(0,256))
+        cv.drawContours(drawing, contours_poly, i, color)
+        cv.rectangle(drawing, (int(boundRect[i][0]), int(boundRect[i][1])), 
+          (int(boundRect[i][0]+boundRect[i][2]), int(boundRect[i][1]+boundRect[i][3])), color, 2)
+    return drawing
 
 def update(data):
 
@@ -75,20 +121,31 @@ def update(data):
 
     timer_start = time.time()
     a = a[:, scope_start:scope_end].ravel()
-    zi = spi.griddata((x, y), a, (xi, yi), method='cubic')
+    zi = spi.griddata((x, y), a, (xi, yi), method='linear')
     #zi = a
     zi = np.fliplr(zi)
     print ("it took %fs for griddata and flip"%(time.time() - timer_start))
-    
-    timer_start = time.time()
-    cm.set_array(zi[::-1,::-1])  # rotate 180 degrees
-    print ("it took %fs for rotate 180 degrees"%(time.time() - timer_start))
 
-    global cm_max
+    if contour:
+        timer_start = time.time()
+        global cm_max, threshold
+        cm_max = 255
+        ret, zi = cv.threshold(zi,threshold,cm_max,cv.THRESH_BINARY)
+        drawing = contour_rectangle(zi)
+        cm.set_array(drawing[::-1,::-1,0] + zi[::-1,::-1])
+        #cm.set_array(drawing[::-1,::-1,0])
+        print ("it took %fs for creating contour"%(time.time() - timer_start))
+    else:
+        timer_start = time.time()
+        cm.set_array(zi[::-1,::-1])  # rotate 180 degrees
+        print ("it took %fs for rotate 180 degrees"%(time.time() - timer_start))
+
     if heat_mode[heat_choice] == 'rel':
         cm.autoscale()  # reset colormap
+        #return zi
     elif heat_mode[heat_choice] == 'abs':
         cm.set_clim(0, cm_max)  # reset colormap
+        #return zi
 
 
 if __name__ == "__main__":
@@ -132,7 +189,6 @@ if __name__ == "__main__":
         logpath = filedialog.askopenfilename()
         root.destroy()
     
-    #print("logpath: " + logpath)
     
     # ---
         
@@ -150,12 +206,9 @@ if __name__ == "__main__":
 
     x = np.array([r]).T * np.sin(t)
     y = np.array([r]).T * np.cos(t)
-    #print( "shape: " + str(x.shape))
     scope_start = round(x.shape[1] * scope_start)
     scope_end = round(x.shape[1] * scope_end)
-    #print( "scope: " + str(scope_start) + " " + str(scope_end))
     x = x[:, scope_start:scope_end].ravel()
-    print( "shape: " + str(x.shape))
     y = y[:, scope_start:scope_end].ravel()
     y = y - range_bias
 
@@ -192,6 +245,7 @@ if __name__ == "__main__":
     if read_serial == 'serial':
         start_plot(fig, ax, update)
     elif read_serial == 'read':
+        contour = True
         replay_plot(fig, ax, update, logpath)
 
     ''' 
