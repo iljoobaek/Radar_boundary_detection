@@ -7,7 +7,7 @@
 # azimuth-range FFT heatmap - 2D plot
 #
 
-import os, sys, copy
+import os, sys, copy, math
 import cv2 as cv
 import random as rng
 rng.seed(12345)
@@ -80,10 +80,12 @@ def onclick(event):
         
     return (event.xdata, event.ydata)
 
-def same_distance(contour_poly):
+def valid_boundary(contour_poly):
     origin = (199.5 , 0)
     distance_max = 0.0      # unit is index
     distance_min = 1000.0   # unit is index
+    angle_max = -180.0
+    angle_min = 180.0
     # x_max = 0 
     # x_min = 1000
     # y_max = 0
@@ -95,6 +97,12 @@ def same_distance(contour_poly):
             distance_max = dist
         if dist < distance_min:
             distance_min = dist
+
+        angle = np.angle((point[0][0] - origin[0]) + point[0][1] * 1j , deg=True)
+        if angle > angle_max:
+            angle_max = angle
+        if angle < angle_min:
+            angle_min = angle
         # if point[0][0] > x_max:
         #     x_max = point[0][0]
         # if point[0][0] < x_min:
@@ -106,6 +114,18 @@ def same_distance(contour_poly):
     
     image_res = range_res * range_bins / grid_res
     variance = (distance_max - distance_min) * image_res  # unit is meter
+    
+    angle_span = angle_max - angle_min
+    print("angle_max, angle_min: " + str(angle_max) + "," + str(angle_min))
+    distance = image_res * (distance_max + distance_min) / 2
+    criteria = 0.1 / (2 * distance * math.pi) * 360
+    print("distance: " + str(distance) + " criteria: " + str(criteria) + " degrees")
+
+    if variance > 0.5:
+        return False
+    if angle_span < criteria:
+        return False
+
     # print("x_max   x_min   y_max   y_min")
     # print(str(x_max) + "     " + str(x_min) + "     " + str(y_max) + "     " + str(y_min))
     # print("=== rectangle center x,y = " + str(image_res * ((x_max + x_min) / 2 - origin[0])) 
@@ -113,17 +133,8 @@ def same_distance(contour_poly):
     # print("distance_max,distance_min = " + str(distance_max * image_res) + "," + str(distance_min * image_res))
     # print("image_res: " + str(image_res) + " variance: " + str(variance))
     # print("")
-    if variance > 0.5:
-        return False
+    
     return True
-
-def enough_span(contour_poly):
-    return True
-
-def valid_boundary(contour_poly):
-    if same_distance(contour_poly) and enough_span(contour_poly):
-        return True
-    return False
 
 def contour_rectangle(zi):
     zi_copy = np.uint8(zi)
@@ -137,14 +148,15 @@ def contour_rectangle(zi):
         #print("shape of contour_poly[" + str(i) + "] " + str(contours_poly[i].shape))
         #print(contours_poly[i])
         boundRect[i] = cv.boundingRect(contours_poly[i])
-        boundary_or_not[i] = valid_boundary(contours_poly[i])
+        if i == 37:
+            boundary_or_not[i] = valid_boundary(contours_poly[i])
 
     print(boundary_or_not)
 
     drawing = np.zeros((canny_output.shape[0], canny_output.shape[1], 4), dtype=np.uint8)
 
     for i in range(len(contours)):
-        if boundary_or_not[i]:
+        if boundary_or_not[i] or i == 37:
             color = (rng.randint(0,256), rng.randint(0,256), rng.randint(0,256))
             cv.drawContours(drawing, contours_poly, i, color)
             cv.rectangle(drawing, (int(boundRect[i][0]), int(boundRect[i][1])), 
