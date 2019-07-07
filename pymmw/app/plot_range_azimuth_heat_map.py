@@ -80,6 +80,50 @@ def onclick(event):
         
     return (event.xdata, event.ydata)
 
+def same_distance(contour_poly):
+    origin = (199.5 , 0)
+    distance_max = 0.0      # unit is index
+    distance_min = 1000.0   # unit is index
+    # x_max = 0 
+    # x_min = 1000
+    # y_max = 0
+    # y_min = 1000
+    for point in contour_poly:
+        #print(point)
+        dist = np.linalg.norm(point - origin)
+        if dist > distance_max:
+            distance_max = dist
+        if dist < distance_min:
+            distance_min = dist
+        # if point[0][0] > x_max:
+        #     x_max = point[0][0]
+        # if point[0][0] < x_min:
+        #     x_min = point[0][0]
+        # if point[0][1] > y_max:
+        #     y_max = point[0][1]
+        # if point[0][1] < y_min:
+        #     y_min = point[0][1]
+    
+    image_res = range_res * range_bins / grid_res
+    variance = (distance_max - distance_min) * image_res  # unit is meter
+    # print("x_max   x_min   y_max   y_min")
+    # print(str(x_max) + "     " + str(x_min) + "     " + str(y_max) + "     " + str(y_min))
+    # print("=== rectangle center x,y = " + str(image_res * ((x_max + x_min) / 2 - origin[0])) 
+    #                     + "," + str(image_res * ((y_max + y_min) / 2 - origin[1])) + " ===")
+    # print("distance_max,distance_min = " + str(distance_max * image_res) + "," + str(distance_min * image_res))
+    # print("image_res: " + str(image_res) + " variance: " + str(variance))
+    # print("")
+    if variance > 0.5:
+        return False
+    return True
+
+def enough_span(contour_poly):
+    return True
+
+def valid_boundary(contour_poly):
+    if same_distance(contour_poly) and enough_span(contour_poly):
+        return True
+    return False
 
 def contour_rectangle(zi):
     zi_copy = np.uint8(zi)
@@ -87,18 +131,24 @@ def contour_rectangle(zi):
     contours, _ = cv.findContours(canny_output, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
     contours_poly = [None]*len(contours)
     boundRect = [None]*len(contours)
+    boundary_or_not = [None]*len(contours)
     for i, c in enumerate(contours):
         contours_poly[i] = cv.approxPolyDP(c, 0.01, True)
         #print("shape of contour_poly[" + str(i) + "] " + str(contours_poly[i].shape))
+        #print(contours_poly[i])
         boundRect[i] = cv.boundingRect(contours_poly[i])
+        boundary_or_not[i] = valid_boundary(contours_poly[i])
+
+    print(boundary_or_not)
 
     drawing = np.zeros((canny_output.shape[0], canny_output.shape[1], 4), dtype=np.uint8)
 
     for i in range(len(contours)):
-        color = (rng.randint(0,256), rng.randint(0,256), rng.randint(0,256))
-        cv.drawContours(drawing, contours_poly, i, color)
-        cv.rectangle(drawing, (int(boundRect[i][0]), int(boundRect[i][1])), 
-          (int(boundRect[i][0]+boundRect[i][2]), int(boundRect[i][1]+boundRect[i][3])), color, 2)
+        if boundary_or_not[i]:
+            color = (rng.randint(0,256), rng.randint(0,256), rng.randint(0,256))
+            cv.drawContours(drawing, contours_poly, i, color)
+            cv.rectangle(drawing, (int(boundRect[i][0]), int(boundRect[i][1])), 
+            (int(boundRect[i][0]+boundRect[i][2]), int(boundRect[i][1]+boundRect[i][3])), color, 2)   
     return drawing
 
 def update(data):
@@ -149,6 +199,10 @@ def update(data):
 
 
 if __name__ == "__main__":
+
+
+    plot.frame_count = 200
+    print("frame_count: " + str(plot.frame_count))
 
     if len(sys.argv[1:]) != 9:
         print('Usage: {} {}'.format(sys.argv[0].split(os.sep)[-1], 

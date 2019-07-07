@@ -428,7 +428,7 @@ def update_plot_from_file(fig, func):
             fig.canvas.draw_idle()
             count += 1
             fig.canvas.set_window_title("frame: " + str(frame_count))
-            time.sleep(1e-6)
+            time.sleep(10000)
         except:
             print("something fails here")
             break
