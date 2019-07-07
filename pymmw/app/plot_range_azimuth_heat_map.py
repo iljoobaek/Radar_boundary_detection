@@ -116,14 +116,18 @@ def valid_boundary(contour_poly):
     variance = (distance_max - distance_min) * image_res  # unit is meter
     
     angle_span = angle_max - angle_min
-    print("angle_max, angle_min: " + str(angle_max) + "," + str(angle_min))
+    #print("angle_max, angle_min: " + str(angle_max) + "," + str(angle_min))
     distance = image_res * (distance_max + distance_min) / 2
     criteria = 0.1 / (2 * distance * math.pi) * 360
-    print("distance: " + str(distance) + " criteria: " + str(criteria) + " degrees")
+    if criteria < 10:
+        criteria = 10
+    #print("distance: " + str(distance) + " criteria: " + str(criteria) + " degrees")
 
     if variance > 0.5:
         return False
     if angle_span < criteria:
+        return False
+    if distance < 1:
         return False
 
     # print("x_max   x_min   y_max   y_min")
@@ -148,15 +152,14 @@ def contour_rectangle(zi):
         #print("shape of contour_poly[" + str(i) + "] " + str(contours_poly[i].shape))
         #print(contours_poly[i])
         boundRect[i] = cv.boundingRect(contours_poly[i])
-        if i == 37:
-            boundary_or_not[i] = valid_boundary(contours_poly[i])
+        boundary_or_not[i] = valid_boundary(contours_poly[i])
 
     print(boundary_or_not)
 
     drawing = np.zeros((canny_output.shape[0], canny_output.shape[1], 4), dtype=np.uint8)
 
     for i in range(len(contours)):
-        if boundary_or_not[i] or i == 37:
+        if boundary_or_not[i]:
             color = (rng.randint(0,256), rng.randint(0,256), rng.randint(0,256))
             cv.drawContours(drawing, contours_poly, i, color)
             cv.rectangle(drawing, (int(boundRect[i][0]), int(boundRect[i][1])), 
@@ -213,8 +216,8 @@ def update(data):
 if __name__ == "__main__":
 
 
-    plot.frame_count = 200
-    print("frame_count: " + str(plot.frame_count))
+    # plot.frame_count = 200
+    # print("frame_count: " + str(plot.frame_count))
 
     if len(sys.argv[1:]) != 9:
         print('Usage: {} {}'.format(sys.argv[0].split(os.sep)[-1], 
