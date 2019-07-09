@@ -240,7 +240,7 @@ def collect_data(start,end):
 
 # ----- Thread: updating the plot ----- #
 # ----- Update the plot ----- #
-def update_plot(fig, q, func, loggingQueue):
+def update_plot(fig, ax, q, func, loggingQueue):
     
     #count = 0
     
@@ -269,6 +269,7 @@ def update_plot(fig, q, func, loggingQueue):
 
         try:
             fig.canvas.draw_idle()
+            ax.set_title('Azimuth-Range FFT Heatmap: ' + str(frame_count) + ' frames', fontsize=48)
             fig.canvas.set_window_title("frame: " + str(frame_count))
             
             time.sleep(1e-6) # yield the interest of scheduler
@@ -314,7 +315,7 @@ def start_plot(fig, ax, func):
 
     # The third thread will get data from queue when available.
     # Then construct complex number array, put it in datamap and pass it back to main script for plotting.
-    threading.Thread(target=update_plot, args=(fig, bytevecQueue, func, dataveclogging)).start()
+    threading.Thread(target=update_plot, args=(fig, ax, bytevecQueue, func, dataveclogging)).start()
     
     
     plt.show(block=True)
@@ -327,7 +328,8 @@ def start_plot(fig, ax, func):
 queueMax = 1
 def replay_plot(fig, ax, func, filepath):
     global filename
-    #filename = filepath
+    filename = filepath
+    print("\n***** filename: " + filename + " *****\n")
 
     global PAYLOAD_SIZE, PACKET_SIZE, PAYLOAD_TRUNC
     PAYLOAD_SIZE = int(PAYLOAD_SIZE_DEFAULT * PAYLOAD_TRUNC)
@@ -346,7 +348,7 @@ def replay_plot(fig, ax, func, filepath):
 
     # The thread will get data from queue when available.
     # Then construct complex number array, put it in datamap and pass it back to main script for plotting.
-    threading.Thread(target=update_plot_from_file, args=(fig, func)).start()
+    threading.Thread(target=update_plot_from_file, args=(fig, ax, func)).start()
     #update_plot_from_file(fig, bytevecQueue, func)
     
     
@@ -396,7 +398,7 @@ def init():
 
 # ----- Thread: Replay plot ----- #
 # ----- Update the plot from log ----- #
-def update_plot_from_file(fig, func):
+def update_plot_from_file(fig, ax, func):
     
     count = 0
 
@@ -427,6 +429,7 @@ def update_plot_from_file(fig, func):
         try:
             fig.canvas.draw_idle()
             count += 1
+            ax.set_title('Azimuth-Range FFT Heatmap: ' + str(frame_count) + ' frames', fontsize=16)
             fig.canvas.set_window_title("frame: " + str(frame_count))
             #time.sleep(10000)
             time.sleep(1e-6)

@@ -14,6 +14,7 @@ rng.seed(12345)
 import tkinter as tk
 from tkinter import filedialog
 
+
 #try:
     
 import numpy as np
@@ -25,6 +26,7 @@ matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 import matplotlib.widgets as wgt
 import matplotlib.patches as pat
+from matplotlib.widgets import Slider, Button
 
 from plot import *
 import plot
@@ -36,49 +38,40 @@ except ImportError:
 
 # ------------------------------------------------
 
-cm_max = 1500
-threshold = 1000
+cm_max = 3000
+threshold = 1200
 contour = False
-def onclick(event):
-    global cm_max, threshold, heat_choice, contour
 
-    # right click
-    if event.button == 3:
-        # for replay: raise up threshold 500. Maximum threshold: 3500
-        if sys.argv[9] == 'read':
-            threshold += 500
-            if threshold > 3500:
-                threshold = 1000
-        # for serial realtime: toggle color range of heatmap
-        if sys.argv[9] == 'serial':
-            # Contour off: raise the colormap maximum
-            if not contour:
-                cm_max += 2000
-                if cm_max > 10000:
-                    cm_max = 1500
-            # Contour on: raise up threshold 500. Maximum threshold: 3500
-            else:
-                threshold += 500
-                if threshold > 3500:
-                    threshold = 1000
+# ----- Helper functions for buttons and sliders ----- #
+def cm_max_update(val):
+    if contour:
+        return
+    global cm_max
+    cm_max = val
 
-    # left click
-    if event.button == 1:  
-        # for replay: fast forward 100 frames
-        if sys.argv[9] == 'read':
-            plot.frame_count += 100
-        # for serial realtime: toggle contour drawing
-        if sys.argv[9] == 'serial':
-            if not contour:
-                # Turn on contour
-                threshold = 1000
-                contour = True
-            else:
-                # Turn off contour
-                contour = False
-                cm_max = 1500
-        
-    return (event.xdata, event.ydata)
+def threshold_update(val):
+    global threshold
+    threshold = val
+
+def contour_update(event):
+    global contour, cm_max
+    contour = not contour
+    if not contour:
+        cm_max = 1200
+
+def forward_update(event):
+    if read_serial == 'serial':
+        return
+    plot.frame_count += 100
+
+def backward_update(event):
+    if read_serial == 'serial':
+        return
+    if plot.frame_count <= 100:
+        return
+    plot.frame_count -= 100
+
+# ------------------------------------------------ #
 
 def valid_boundary(contour_poly):
     origin = (199.5 , 0)
@@ -119,16 +112,16 @@ def valid_boundary(contour_poly):
     #print("angle_max, angle_min: " + str(angle_max) + "," + str(angle_min))
     distance = image_res * (distance_max + distance_min) / 2
     criteria = 0.1 / (2 * distance * math.pi) * 360
-    if criteria < 10:
-        criteria = 10
+    if criteria < 8:
+        criteria = 8
     #print("distance: " + str(distance) + " criteria: " + str(criteria) + " degrees")
 
-    if variance > 0.5:
+    if variance > 0.8:
         return False
     if angle_span < criteria:
         return False
-    if distance < 1:
-        return False
+    if distance < 0.8:
+        return False 
 
     # print("x_max   x_min   y_max   y_min")
     # print(str(x_max) + "     " + str(x_min) + "     " + str(y_max) + "     " + str(y_min))
@@ -309,12 +302,35 @@ if __name__ == "__main__":
         ax.add_patch(pat.Arc((0, 0), width=i*2, height=i*2, angle=90, 
                         theta1=-90, theta2=90, color='white', linewidth=0.5, linestyle=':', zorder=1))
 
-    fig.canvas.mpl_connect('button_press_event', onclick)
-    
+    #fig.canvas.mpl_connect('button_press_event', onclick)
+
+    # choose colors here: https://stackoverflow.com/questions/22408237/named-colors-in-matplotlib
+    axcolor = 'mistyrose'
+    axcm_max = plt.axes([0.2, 0.01, 0.65, 0.02], facecolor=axcolor)
+    scm_max = Slider(axcm_max, 'cm_max', 0, 10000, valinit = cm_max, valstep=500, color='brown')
+
+    axthreshold = plt.axes([0.2, 0.03, 0.65, 0.02], facecolor=axcolor)
+    sthreshold = Slider(axthreshold, 'threshold', 500, 4000, valinit = threshold, valstep=100, color='brown')
+
+    axcontour = plt.axes([0.1, 0.06, 0.1, 0.03])
+    bcontour = Button(axcontour, 'Contour', color='lightblue', hovercolor='0.9')
+
+    axforward = plt.axes([0.25, 0.06, 0.3, 0.03])
+    bforward = Button(axforward, 'Forward(100 frames)', color='lightblue', hovercolor='0.9')
+
+    axbackward = plt.axes([0.6, 0.06, 0.3, 0.03])
+    bbackward = Button(axbackward, 'Backward(100 frames)', color='lightblue', hovercolor='0.9')
+
+    scm_max.on_changed(cm_max_update)
+    sthreshold.on_changed(threshold_update)
+
+    bcontour.on_clicked(contour_update)
+    bforward.on_clicked(forward_update)
+    bbackward.on_clicked(backward_update)
+
     if read_serial == 'serial':
         start_plot(fig, ax, update)
     elif read_serial == 'read':
-        contour = True
         replay_plot(fig, ax, update, logpath)
 
     ''' 
