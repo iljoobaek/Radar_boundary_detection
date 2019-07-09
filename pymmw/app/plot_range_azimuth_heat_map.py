@@ -35,11 +35,20 @@ except ImportError:
     print("import error")
     sys.exit(3)
 '''
+# --- Constants --- #
+
+COLORMAP_MAX = 3000
+COLOR_THRESHOLD = 1200
 
 # ------------------------------------------------
 
-cm_max = 3000
-threshold = 1200
+# colormap maximum
+cm_max = COLORMAP_MAX
+
+# Object detection will be turned-on if contour is true
+# Current algorithm for object detection is color thresholding + Canny edge detection to get contour
+# And use decision-based method on the contours.
+threshold = COLOR_THRESHOLD
 contour = False
 
 # ----- Helper functions for buttons and sliders ----- #
@@ -54,10 +63,12 @@ def threshold_update(val):
     threshold = val
 
 def contour_update(event):
-    global contour, cm_max
+    global contour, cm_max, threshold
     contour = not contour
     if not contour:
-        cm_max = 1200
+        cm_max = COLORMAP_MAX
+    else:
+        threshold = COLOR_THRESHOLD
 
 def forward_update(event):
     if read_serial == 'serial':
@@ -116,10 +127,13 @@ def valid_boundary(contour_poly):
         criteria = 8
     #print("distance: " + str(distance) + " criteria: " + str(criteria) + " degrees")
 
+    # distance variance shouldn't be larger than 0.8 m
     if variance > 0.8:
         return False
+    # angle span should be larger
     if angle_span < criteria:
         return False
+    # objects within 80 cm are discarded, since the housing is giving near-field noise.
     if distance < 0.8:
         return False 
 
@@ -306,6 +320,8 @@ if __name__ == "__main__":
 
     # choose colors here: https://stackoverflow.com/questions/22408237/named-colors-in-matplotlib
     axcolor = 'mistyrose'
+
+    # --- Set the position of the buttons and sliders --- #
     axcm_max = plt.axes([0.2, 0.01, 0.65, 0.02], facecolor=axcolor)
     scm_max = Slider(axcm_max, 'cm_max', 0, 10000, valinit = cm_max, valstep=500, color='brown')
 
@@ -321,12 +337,16 @@ if __name__ == "__main__":
     axbackward = plt.axes([0.6, 0.06, 0.3, 0.03])
     bbackward = Button(axbackward, 'Backward(100 frames)', color='lightblue', hovercolor='0.9')
 
+    # --- Register callbacks of the sliders --- #
     scm_max.on_changed(cm_max_update)
     sthreshold.on_changed(threshold_update)
 
+    # --- Register callbacks of the buttons --- #
     bcontour.on_clicked(contour_update)
     bforward.on_clicked(forward_update)
     bbackward.on_clicked(backward_update)
+
+    # --- Start the core of application based on serial or replay --- #
 
     if read_serial == 'serial':
         start_plot(fig, ax, update)
