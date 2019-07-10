@@ -175,6 +175,10 @@ def contour_rectangle(zi):
 
 def update(data):
 
+    global bshowcm_max, cm_max, threshold
+    bshowcm_max.label.set_text("CM_MAX: " + str(int(cm_max)) + "\nThreshold: " + str(int(threshold))
+                        + "\nAngle Bins: " + str(angle_bins)
+                            + "\nScope: " + str(scope))
     if not 'azimuth' in data or len(data['azimuth']) != range_bins * tx_azimuth_antennas * rx_antennas * 2:
         return
 
@@ -200,7 +204,6 @@ def update(data):
 
     if contour:
         timer_start = time.time()
-        global cm_max, threshold
         cm_max = 255
         ret, zi = cv.threshold(zi,threshold,cm_max,cv.THRESH_BINARY)
         drawing = contour_rectangle(zi)
@@ -322,20 +325,27 @@ if __name__ == "__main__":
     axcolor = 'mistyrose'
 
     # --- Set the position of the buttons and sliders --- #
-    axcm_max = plt.axes([0.2, 0.01, 0.65, 0.02], facecolor=axcolor)
+    axcm_max = plt.axes([0.2, 0.001, 0.65, 0.02], facecolor=axcolor)
     scm_max = Slider(axcm_max, 'cm_max', 0, 10000, valinit = cm_max, valstep=500, color='brown')
 
-    axthreshold = plt.axes([0.2, 0.03, 0.65, 0.02], facecolor=axcolor)
+    axthreshold = plt.axes([0.2, 0.021, 0.65, 0.02], facecolor=axcolor)
     sthreshold = Slider(axthreshold, 'threshold', 500, 4000, valinit = threshold, valstep=100, color='brown')
 
-    axcontour = plt.axes([0.1, 0.06, 0.1, 0.03])
+    axcontour = plt.axes([0.1, 0.04, 0.1, 0.02])
     bcontour = Button(axcontour, 'Contour', color='lightblue', hovercolor='0.9')
 
-    axforward = plt.axes([0.25, 0.06, 0.3, 0.03])
+    axforward = plt.axes([0.25, 0.04, 0.3, 0.02])
     bforward = Button(axforward, 'Forward(100 frames)', color='lightblue', hovercolor='0.9')
 
-    axbackward = plt.axes([0.6, 0.06, 0.3, 0.03])
+    axbackward = plt.axes([0.6, 0.04, 0.3, 0.02])
     bbackward = Button(axbackward, 'Backward(100 frames)', color='lightblue', hovercolor='0.9')
+
+    axshowcm_max = plt.axes([0.8, 0.8, 0.17, 0.15], facecolor=axcolor)
+    bshowcm_max = Button(axshowcm_max, "CM_MAX: " + str(int(cm_max)) 
+                    + "\nThreshold: " + str(int(threshold))
+                        + "\nAngle Bins: " + str(angle_bins)
+                            + "\nScope: " + str(scope), color='lightblue', hovercolor='0.9')
+    bshowcm_max.label.set_fontsize(24)
 
     # --- Register callbacks of the sliders --- #
     scm_max.on_changed(cm_max_update)
