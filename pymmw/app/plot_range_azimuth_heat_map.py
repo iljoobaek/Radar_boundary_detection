@@ -35,10 +35,16 @@ except ImportError:
     print("import error")
     sys.exit(3)
 '''
+
+import socket
+
 # --- Constants --- #
 
 COLORMAP_MAX = 3000
 COLOR_THRESHOLD = 1200
+host = '127.0.0.1'
+port = 12345
+s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 
 # ------------------------------------------------
 
@@ -83,8 +89,12 @@ def backward_update(event):
     plot.frame_count -= 100
 
 # ------------------------------------------------ #
-
+firstRun = True
 def valid_boundary(contour_poly):
+    global firstRun
+    if firstRun:
+        s.connect((host,port))
+        firstRun = False
     origin = (199.5 , 0)
     distance_max = 0.0      # unit is index
     distance_min = 1000.0   # unit is index
@@ -120,32 +130,45 @@ def valid_boundary(contour_poly):
     variance = (distance_max - distance_min) * image_res  # unit is meter
     
     angle_span = angle_max - angle_min
-    #print("angle_max, angle_min: " + str(angle_max) + "," + str(angle_min))
     distance = image_res * (distance_max + distance_min) / 2
     criteria = 0.1 / (2 * distance * math.pi) * 360
     if criteria < 8:
         criteria = 8
     #print("distance: " + str(distance) + " criteria: " + str(criteria) + " degrees")
-
+    message = '00000000000000000000000000000000000000000000000000000000000'
     # distance variance shouldn't be larger than 0.8 m
     if variance > 0.8:
-        return False
+        return [False, message] 
     # angle span should be larger
     if angle_span < criteria:
-        return False
+        return [False, message]
     # objects within 80 cm are discarded, since the housing is giving near-field noise.
     if distance < 0.8:
-        return False 
+        return [False, message]
 
-    # print("x_max   x_min   y_max   y_min")
-    # print(str(x_max) + "     " + str(x_min) + "     " + str(y_max) + "     " + str(y_min))
-    # print("=== rectangle center x,y = " + str(image_res * ((x_max + x_min) / 2 - origin[0])) 
+    length = distance * 2 * math.pi * angle_span / 360.
+    width = cv2.contourArea(contour_poly) * image_res**2 / length
+
+    #print("x_max   x_min   y_max   y_min")
+    #print(str(x_max) + "     " + str(x_min) + "     " + str(y_max) + "     " + str(y_min))
+    #print("=== rectangle center x,y = " + str(image_res * ((x_max + x_min) / 2 - origin[0])) 
     #                     + "," + str(image_res * ((y_max + y_min) / 2 - origin[1])) + " ===")
-    # print("distance_max,distance_min = " + str(distance_max * image_res) + "," + str(distance_min * image_res))
-    # print("image_res: " + str(image_res) + " variance: " + str(variance))
-    # print("")
+    #print("distance_max,distance_min = " + str(distance_max * image_res) + "," + str(distance_min * image_res))
+    #print("image_res: " + str(image_res) + " variance: " + str(variance))
+    #print("")
     
-    return True
+
+    #message = str(x_max) + "     " + str(x_min) + "     " + str(y_max) + "     " + str(y_min) + "     "  + str(distance_max * image_res) + "," + str(distance_min * image_res)
+    #message = "length: " + str(length) + " width: " + str(width) + " distance: " + str(distance)
+    if width == 0.0:
+        message = ','.join([str(length)[0:14], "0.000000000000", str(distance)[0:14], str(angle_span)[0:14]])
+    else:
+        message = ','.join([str(length)[0:14], str(width)[0:14], str(distance)[0:14], str(angle_span)[0:14]])
+    #data = s.recv(1024)
+    s.send(message.encode('ascii'))
+    #print('Received from the server :',str(data.decode('ascii'))) 
+
+    return [True, message]
 
 def contour_rectangle(zi):
     zi_copy = np.uint8(zi)
@@ -154,12 +177,16 @@ def contour_rectangle(zi):
     contours_poly = [None]*len(contours)
     boundRect = [None]*len(contours)
     boundary_or_not = [None]*len(contours)
+    serverSend = ""
     for i, c in enumerate(contours):
         contours_poly[i] = cv.approxPolyDP(c, 0.01, True)
         #print("shape of contour_poly[" + str(i) + "] " + str(contours_poly[i].shape))
         #print(contours_poly[i])
         boundRect[i] = cv.boundingRect(contours_poly[i])
-        boundary_or_not[i] = valid_boundary(contours_poly[i])
+        boundary_or_not[i], message = valid_boundary(contours_poly[i])[0], valid_boundary(contours_poly[i])[1]
+        serverSend += message
+    #s.send(serverSend[0:118].encode('ascii'))
+    #print(serverSend)
 
     print(boundary_or_not)
 
@@ -362,7 +389,7 @@ if __name__ == "__main__":
         start_plot(fig, ax, update)
     elif read_serial == 'read':
         replay_plot(fig, ax, update, logpath)
-
+    s.close()
     ''' 
     except Exception:
         sys.exit(2)

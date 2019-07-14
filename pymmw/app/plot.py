@@ -64,7 +64,7 @@ device_name = '/dev/tty.usbmodem000000004'
 
 # ----- File name of log ----- #
 
-filename = "/Users/wcchung/OneDrive/Main/17699/TI SDK/Radar_boundary_detection/pymmw/app/DATA/binary-2019-07-02-16-57-54.dat"
+filename = "/home/droid/Radar_boundary_detection/pymmw/app/DATA/binary-2019-07-01-22-18-58.dat"
 
 # ----- Magic Word ----- #
 magic_word = "0201040306050807"
