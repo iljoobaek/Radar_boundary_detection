@@ -189,13 +189,13 @@ def valid_boundary(contour_poly):
 
     # distance variance shouldn't be larger than 0.8 m
     if variance > 0.8:
-        return False
+        return False , distance
     # angle span should be larger
     if angle_span < criteria:
-        return False
+        return False , distance
     # objects within 80 cm are discarded, since the housing is giving near-field noise.
     if distance < 0.8:
-        return False 
+        return False , distance
 
     # print("x_max   x_min   y_max   y_min")
     # print(str(x_max) + "     " + str(x_min) + "     " + str(y_max) + "     " + str(y_min))
@@ -205,7 +205,7 @@ def valid_boundary(contour_poly):
     # print("image_res: " + str(image_res) + " variance: " + str(variance))
     # print("")
     
-    return True
+    return True , distance
 
 def contour_rectangle(zi):
     zi_copy = np.uint8(zi)
@@ -214,24 +214,29 @@ def contour_rectangle(zi):
     contours_poly = [None]*len(contours)
     boundRect = [None]*len(contours)
     boundary_or_not = [None]*len(contours)
+    distance = [None]*len(contours)
     for i, c in enumerate(contours):
         contours_poly[i] = cv.approxPolyDP(c, 0.01, True)
         #print("shape of contour_poly[" + str(i) + "] " + str(contours_poly[i].shape))
         #print(contours_poly[i])
         boundRect[i] = cv.boundingRect(contours_poly[i])
-        boundary_or_not[i] = valid_boundary(contours_poly[i])
+        boundary_or_not[i],distance[i] = valid_boundary(contours_poly[i])
 
     print(boundary_or_not)
 
     drawing = np.zeros((canny_output.shape[0], canny_output.shape[1], 4), dtype=np.uint8)
+    labels = np.zeros((canny_output.shape[0], canny_output.shape[1], 4), dtype=np.uint8)
 
     for i in range(len(contours)):
         if boundary_or_not[i]:
             color = (rng.randint(0,256), rng.randint(0,256), rng.randint(0,256))
             cv.drawContours(drawing, contours_poly, i, color)
             cv.rectangle(drawing, (int(boundRect[i][0]), int(boundRect[i][1])), 
-            (int(boundRect[i][0]+boundRect[i][2]), int(boundRect[i][1]+boundRect[i][3])), color, 2)   
-    return drawing
+            (int(boundRect[i][0]+boundRect[i][2]), int(boundRect[i][1]+boundRect[i][3])), color, 2)
+            cv.putText(labels, ("%.4f" % distance[i]), 
+                            (grid_res - int(boundRect[i][0] - 10), grid_res - int(boundRect[i][1]) - 10), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)   
+    return drawing, labels
 
 def update(data):
 
@@ -266,8 +271,8 @@ def update(data):
         timer_start = time.time()
         cm_max = 255
         ret, zi = cv.threshold(zi,threshold,cm_max,cv.THRESH_BINARY)
-        drawing = contour_rectangle(zi)
-        cm.set_array(drawing[::-1,::-1,0] + zi[::-1,::-1])
+        drawing, labels = contour_rectangle(zi)
+        cm.set_array(drawing[::-1,::-1,0] + zi[::-1,::-1] + labels[:,:,0])
         #cm.set_array(drawing[::-1,::-1,0])
         print ("it took %fs for creating contour"%(time.time() - timer_start))
     else:
