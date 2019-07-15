@@ -326,7 +326,7 @@ def start_plot(fig, ax, func):
 # ------------------------------------------------------------------------------------------- #
 # ----- Spawning threads: data from file ----- #
 queueMax = 1
-def replay_plot(fig, ax, func, filepath):
+def replay_plot(fig, ax, func, filepath, ground_truth=False):
     global filename
     filename = filepath
     print("\n***** filename: " + filename + " *****\n")
@@ -348,7 +348,7 @@ def replay_plot(fig, ax, func, filepath):
 
     # The thread will get data from queue when available.
     # Then construct complex number array, put it in datamap and pass it back to main script for plotting.
-    threading.Thread(target=update_plot_from_file, args=(fig, ax, func)).start()
+    threading.Thread(target=update_plot_from_file, args=(fig, ax, func, ground_truth)).start()
     #update_plot_from_file(fig, bytevecQueue, func)
     
     
@@ -398,7 +398,7 @@ def init():
 
 # ----- Thread: Replay plot ----- #
 # ----- Update the plot from log ----- #
-def update_plot_from_file(fig, ax, func):
+def update_plot_from_file(fig, ax, func, ground_truth):
     
     count = 0
 
@@ -431,6 +431,8 @@ def update_plot_from_file(fig, ax, func):
             count += 1
             ax.set_title('Azimuth-Range FFT Heatmap: ' + str(frame_count) + ' frames', fontsize=16)
             fig.canvas.set_window_title("frame: " + str(frame_count))
+            if ground_truth:
+                plt.waitforbuttonpress()
             #time.sleep(10000)
             time.sleep(1e-6)
         except:

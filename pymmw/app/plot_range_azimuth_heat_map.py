@@ -51,6 +51,65 @@ cm_max = COLORMAP_MAX
 threshold = COLOR_THRESHOLD
 contour = False
 
+# ----- Helper function for generating ground truth ----- #
+# ----- log the mouse click ----- #
+# Mouse left click indicates a detected object. Right click implies not found.
+mouse_in_heatmap = False
+def onclick(event):
+    if not mouse_in_heatmap:
+        print("[on-click] mouse not in heatmap. Not logged.")
+        return
+    #print("[on-click] frame_count: " + str(plot.frame_count))
+    print('[on-click] %s click: button=%d, x=%d, y=%d, xdata=%f, ydata=%f' %
+          ('double' if event.dblclick else 'single', event.button,
+           event.x, event.y, event.xdata, event.ydata))
+    if event.button == 3:
+        flush_ground_truth(plot.frame_count, -1)
+    else:
+        point = np.zeros((2,1))
+        point[0] = event.xdata
+        point[1] = event.ydata
+        origin = np.zeros((2,1))
+        dist = np.linalg.norm(point - origin)
+        flush_ground_truth(plot.frame_count, dist)
+
+def enter_axes(event):
+    if type(event.inaxes) == type(ax): 
+        print("in heatmap")
+        global mouse_in_heatmap
+        mouse_in_heatmap = True
+        #print('enter_axes', event.inaxes)
+        event.inaxes.patch.set_facecolor('white')
+        event.canvas.draw()
+
+def leave_axes(event):
+    global mouse_in_heatmap
+    mouse_in_heatmap = False
+    #print('leave_axes', event.inaxes)
+    event.inaxes.patch.set_facecolor('yellow')
+    event.canvas.draw()
+
+# ----- flush the data into ground_truth.txt ----- #
+# distance will be -1 if no object detected.
+last_frame_count = 0
+def flush_ground_truth(frame_count, distance):
+    global last_frame_count
+    if frame_count == last_frame_count:
+        print("[flush_ground_truth] click too fast - last: %d this: %d" % (last_frame_count, frame_count))
+        print("[flush_ground_truth] skip!")
+        return
+    print("[flush_ground_truth] frame_count: %d distance: %f" % (frame_count, distance))
+    #print(os.path.basename(logpath).strip(".dat"))
+    ground_truth_path = "DATA/ground_truth_" + os.path.basename(logpath).strip(".dat") + ".txt"
+    with open(ground_truth_path, "a") as f:
+        data = str(frame_count) + ',' + ("%.5f" % distance) + '\n'
+        f.write(data)
+    f.close()
+    last_frame_count = frame_count
+    print("[flush_ground_truth] data flushed!")
+    return
+
+
 # ----- Helper functions for buttons and sliders ----- #
 def cm_max_update(val):
     if contour:
@@ -69,6 +128,7 @@ def contour_update(event):
         cm_max = COLORMAP_MAX
     else:
         threshold = COLOR_THRESHOLD
+    plot.frame_count -= 1
 
 def forward_update(event):
     if read_serial == 'serial':
@@ -262,7 +322,7 @@ if __name__ == "__main__":
 
     read_serial = sys.argv[9]
     logpath = ""
-    if read_serial == 'read':
+    if read_serial == 'read' or read_serial == 'ground_truth':
         root = tk.Tk()
         root.withdraw()
         logpath = filedialog.askopenfilename()
@@ -357,11 +417,16 @@ if __name__ == "__main__":
     bbackward.on_clicked(backward_update)
 
     # --- Start the core of application based on serial or replay --- #
-
+    
     if read_serial == 'serial':
         start_plot(fig, ax, update)
     elif read_serial == 'read':
         replay_plot(fig, ax, update, logpath)
+    elif read_serial == 'ground_truth':
+        fig.canvas.mpl_connect('button_press_event', onclick)
+        fig.canvas.mpl_connect('axes_enter_event', enter_axes)
+        fig.canvas.mpl_connect('axes_leave_event', leave_axes)
+        replay_plot(fig, ax, update, logpath, True)
 
     ''' 
     except Exception:
