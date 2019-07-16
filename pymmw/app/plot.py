@@ -46,6 +46,7 @@ def move_figure(fig, xy):
 
 # ------------------------------------------------------------------------------------------- #
 
+flush_test_data = False
 
 # ----- Some numbers about payload manipulation ----- #
 # Now this only support packet with 1 TLV and azimuth heat map specific.
@@ -427,7 +428,8 @@ def update_plot_from_file(fig, ax, func, ground_truth):
             
 
         try:
-            fig.canvas.draw_idle()
+            if not flush_test_data:
+                fig.canvas.draw_idle()
             count += 1
             ax.set_title('Azimuth-Range FFT Heatmap: ' + str(frame_count) + ' frames', fontsize=16)
             fig.canvas.set_window_title("frame: " + str(frame_count))

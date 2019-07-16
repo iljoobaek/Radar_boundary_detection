@@ -8,6 +8,7 @@
 #
 
 import os, sys, copy, math
+from math import sqrt
 import cv2 as cv
 import random as rng
 rng.seed(12345)
@@ -35,12 +36,14 @@ except ImportError:
     print("import error")
     sys.exit(3)
 '''
+
+# ---------------------------------------------------------- #
+# ---------------------------------------------------------- #
+# ---------------------------------------------------------- #
 # --- Constants --- #
 
 COLORMAP_MAX = 3000
 COLOR_THRESHOLD = 700
-
-# ------------------------------------------------
 
 # colormap maximum
 cm_max = COLORMAP_MAX
@@ -49,8 +52,12 @@ cm_max = COLORMAP_MAX
 # Current algorithm for object detection is color thresholding + Canny edge detection to get contour
 # And use decision-based method on the contours.
 threshold = COLOR_THRESHOLD
-contour = False
+contour = True
+plot.flush_test_data = True
 
+# ---------------------------------------------------------- #
+# ---------------------------------------------------------- #
+# ---------------------------------------------------------- #
 # ----- Helper function for generating ground truth ----- #
 # ----- log the mouse click ----- #
 # Mouse left click indicates a detected object. Right click implies not found.
@@ -109,12 +116,22 @@ def flush_ground_truth(frame_count, distance):
     print("[flush_ground_truth] data flushed!")
     return
 
+# ----- Read ground truth data from text file ----- #
 ground_truth = {}
 def read_ground_truth():
     ground_truth_path = "DATA/ground_truth_" + os.path.basename(logpath).strip(".dat") + ".txt"
     with open(ground_truth_path, "r") as f:
         for line in f:
             ground_truth[int(line.split(',')[0])] = float(line.split(',')[1])
+    return
+
+# ----- flush the detected distance into test.txt ----- #
+def flush_test(frame_count, distance):
+    test_path = "DATA/test_" + os.path.basename(logpath).strip(".dat") + ".txt"
+    with open(test_path, "a") as f:
+        data = str(frame_count) + ',' + ("%.5f" % distance) + '\n'
+        f.write(data)
+    f.close()
     return
 
 # ----- Helper functions for buttons and sliders ----- #
@@ -149,20 +166,17 @@ def backward_update(event):
         return
     plot.frame_count -= 100
 
-# ------------------------------------------------ #
-
+# ---------------------------------------------------------- #
+# ---------------------------------------------------------- #
+# ---------------------------------------------------------- #
+# ----- Helper function - first step: generating possible objects ----- #
 def valid_boundary(contour_poly):
     origin = (199.5 , 0)
     distance_max = 0.0      # unit is index
     distance_min = 1000.0   # unit is index
     angle_max = -180.0
     angle_min = 180.0
-    # x_max = 0 
-    # x_min = 1000
-    # y_max = 0
-    # y_min = 1000
     for point in contour_poly:
-        #print(point)
         dist = np.linalg.norm(point - origin)
         if dist > distance_max:
             distance_max = dist
@@ -174,14 +188,6 @@ def valid_boundary(contour_poly):
             angle_max = angle
         if angle < angle_min:
             angle_min = angle
-        # if point[0][0] > x_max:
-        #     x_max = point[0][0]
-        # if point[0][0] < x_min:
-        #     x_min = point[0][0]
-        # if point[0][1] > y_max:
-        #     y_max = point[0][1]
-        # if point[0][1] < y_min:
-        #     y_min = point[0][1]
     
     image_res = range_res * range_bins / grid_res
     variance = (distance_max - distance_min) * image_res  # unit is meter
@@ -189,40 +195,118 @@ def valid_boundary(contour_poly):
     angle_span = angle_max - angle_min
     #print("angle_max, angle_min: " + str(angle_max) + "," + str(angle_min))
     distance = image_res * (distance_max + distance_min) / 2
+    
+    # Currently:
+    # Distance: 0m   Span: at least 30 degrees
+    # Distance: 15m  Span: at least 6 degrees
+    # (interpolations between 0m and 15m)
     criteria = (30 + (30 - 6) / (0 - 15) * distance)
-    # if distance < 3:
-    #     criteria = 30
-    # elif 3 <= distance and distance < 6:
-    #     criteria = 20
-    # elif 6 <= distance and distance < 9:
-    #     criteria = 10
-    # elif 9 <= distance and distance < 12:
-    #     criteria = 8
-    # elif distance > 12:
-    #     criteria = 6
+
     #print("distance: " + str(distance) + " criteria: " + str(criteria) + " degrees")
 
     # distance variance shouldn't be larger than 0.8 m
     if variance > 0.8:
         return False , distance
+
     # angle span should be larger
     if angle_span < criteria:
         return False , distance
+
     # objects within 80 cm are discarded, since the housing is giving near-field noise.
     if distance < 0.8:
         return False , distance
-
-    # print("x_max   x_min   y_max   y_min")
-    # print(str(x_max) + "     " + str(x_min) + "     " + str(y_max) + "     " + str(y_min))
-    # print("=== rectangle center x,y = " + str(image_res * ((x_max + x_min) / 2 - origin[0])) 
-    #                     + "," + str(image_res * ((y_max + y_min) / 2 - origin[1])) + " ===")
-    # print("distance_max,distance_min = " + str(distance_max * image_res) + "," + str(distance_min * image_res))
-    # print("image_res: " + str(image_res) + " variance: " + str(variance))
-    # print("")
     
     return True , distance
 
+# ----- Helper function - second step: making decisions ----- #
+def noise_removal(boundary_or_not, distance, contours_poly):
+    object_index = []
+    for i in range(len(boundary_or_not)):
+        if boundary_or_not[i] :
+            object_index.append(i)
 
+    # print("===== boundary_or_not")
+    # print(boundary_or_not)
+
+    # print("===== object_index")
+    # print(object_index)
+    # print("===== distance")
+    # for i in range(len(distance)):
+    #     try:
+    #         object_index.index(i)
+    #         print(distance[i], end=',')
+    #     except:
+    #         continue
+    # print("")
+
+    index_cluster = cluster_by_distance(object_index, distance)
+    
+    # print("===== index_cluster")
+    # print(index_cluster)
+
+    only_clusters = True
+    last_cluster = -1
+    for i in range(len(index_cluster)):
+        if len(index_cluster[i]) == 1:
+            only_clusters = False
+            if i > last_cluster:
+                last_cluster = i
+    
+    for i in range(len(boundary_or_not)):
+        boundary_or_not[i] = False        
+
+    if not only_clusters:
+        boundary_or_not[index_cluster[last_cluster][-1]] = True
+
+    return boundary_or_not
+
+""" 
+def filter_by_area(boundary_or_not, distance, contours_poly):
+    
+    return boundary_or_not """
+
+# ----- Helper function for clustering: mean of list ----- #
+def mean(lst):
+    n = float(len(lst))
+    mean = sum(lst) / n
+    # stdev = sqrt((sum(x*x for x in lst) / n) - (mean * mean)) 
+    return mean
+
+# ----- Helper function for clustering ----- #
+# ----- generating clusters by checking the distance to mean ----- #
+def process(distance, object_index, criteria=1):
+    dist_cluster = []
+    index_cluster = []
+    for i in range(len(distance)):
+        try:
+            object_index.index(i)
+        except:
+            continue
+
+        if len(dist_cluster) < 1:    # the first two values are going directly in
+            dist_cluster.append(distance[i])
+            index_cluster.append(i)
+            continue
+
+        cluster_mean = mean(dist_cluster)
+        if abs(cluster_mean - distance[i]) > criteria:    # check the "distance"
+            yield index_cluster
+            dist_cluster[:] = []    # reset cluster to the empty list
+            index_cluster[:] = []    # reset cluster to the empty list
+
+        dist_cluster.append(distance[i])
+        index_cluster.append(i)
+    yield index_cluster
+
+# ----- clustering by distance ----- #
+def cluster_by_distance(object_index, distance):
+    ret = []
+    for cluster in process(distance, object_index):
+        ret.append(cluster.copy())
+        #ret.append(cluster)
+    return ret
+
+# ----- Main function for object detection: generating contour & rectangles ----- #
 def contour_rectangle(zi):
     zi_copy = np.uint8(zi)
     #canny_output = cv.Canny(zi_copy, 100, 100)
@@ -238,11 +322,12 @@ def contour_rectangle(zi):
         boundRect[i] = cv.boundingRect(contours_poly[i])
         boundary_or_not[i],distance[i] = valid_boundary(contours_poly[i])
 
-    print(boundary_or_not)
+    boundary_or_not = noise_removal(boundary_or_not, distance, contours_poly)
 
     drawing = np.zeros((zi_copy.shape[0], zi_copy.shape[1], 4), dtype=np.uint8)
     labels = np.zeros((zi_copy.shape[0], zi_copy.shape[1], 4), dtype=np.uint8)
 
+    ret_dist = -1
     for i in range(len(contours)):
         if boundary_or_not[i]:
             color = (rng.randint(0,256), rng.randint(0,256), rng.randint(0,256))
@@ -252,8 +337,13 @@ def contour_rectangle(zi):
             cv.putText(labels, ("%.4f" % distance[i]), 
                             (grid_res - int(boundRect[i][0] - 10), grid_res - int(boundRect[i][1]) - 10), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)   
-    return drawing, labels
+            ret_dist = distance[i]
+    return drawing, labels, ret_dist
 
+# ---------------------------------------------------------- #
+# ---------------------------------------------------------- #
+# ---------------------------------------------------------- #
+# ----- Helper function to put ground_truth on plot ----- #
 curb_arc_patch = pat.Arc((0,0), 1, 1)
 def update_ground_truth():
     global curb_arc_patch
@@ -266,9 +356,10 @@ def update_ground_truth():
     curb_arc_patch = pat.Arc((0, 0), width=ground_truth_distance*2, height=ground_truth_distance*2, angle=90, 
                         theta1=-30, theta2=30, color='magenta', linewidth=3, linestyle=':', zorder=1)
     ax.add_patch(curb_arc_patch)
-
     return
 
+
+# ----- Main function for updating the plot ----- #
 def update(data):
 
     global bshowcm_max, cm_max, threshold
@@ -304,8 +395,10 @@ def update(data):
         timer_start = time.time()
         cm_max = 255
         ret, zi = cv.threshold(zi,threshold,cm_max,cv.THRESH_BINARY)
-        drawing, labels = contour_rectangle(zi)
+        drawing, labels, ret_dist = contour_rectangle(zi)
         cm.set_array(drawing[::-1,::-1,0] + zi[::-1,::-1] + labels[:,:,0])
+        if plot.flush_test_data:
+            flush_test(plot.frame_count, ret_dist)
         #cm.set_array(drawing[::-1,::-1,0])
         print ("it took %fs for creating contour"%(time.time() - timer_start))
     else:
@@ -320,7 +413,10 @@ def update(data):
         cm.set_clim(0, cm_max)  # reset colormap
         #return zi
 
-
+# ---------------------------------------------------------- #
+# ---------------------------------------------------------- #
+# ---------------------------------------------------------- #
+# ----- Application Entry ----- #
 if __name__ == "__main__":
 
 
