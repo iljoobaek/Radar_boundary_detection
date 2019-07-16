@@ -38,7 +38,7 @@ except ImportError:
 # --- Constants --- #
 
 COLORMAP_MAX = 3000
-COLOR_THRESHOLD = 1200
+COLOR_THRESHOLD = 700
 
 # ------------------------------------------------
 
@@ -109,6 +109,13 @@ def flush_ground_truth(frame_count, distance):
     print("[flush_ground_truth] data flushed!")
     return
 
+ground_truth = {}
+def read_ground_truth():
+    ground_truth_path = "DATA/ground_truth_" + os.path.basename(logpath).strip(".dat") + ".txt"
+    with open(ground_truth_path, "r") as f:
+        for line in f:
+            ground_truth[int(line.split(',')[0])] = float(line.split(',')[1])
+    return
 
 # ----- Helper functions for buttons and sliders ----- #
 def cm_max_update(val):
@@ -182,9 +189,17 @@ def valid_boundary(contour_poly):
     angle_span = angle_max - angle_min
     #print("angle_max, angle_min: " + str(angle_max) + "," + str(angle_min))
     distance = image_res * (distance_max + distance_min) / 2
-    criteria = 0.1 / (2 * distance * math.pi) * 360
-    if criteria < 8:
-        criteria = 8
+    criteria = (30 + (30 - 6) / (0 - 15) * distance)
+    # if distance < 3:
+    #     criteria = 30
+    # elif 3 <= distance and distance < 6:
+    #     criteria = 20
+    # elif 6 <= distance and distance < 9:
+    #     criteria = 10
+    # elif 9 <= distance and distance < 12:
+    #     criteria = 8
+    # elif distance > 12:
+    #     criteria = 6
     #print("distance: " + str(distance) + " criteria: " + str(criteria) + " degrees")
 
     # distance variance shouldn't be larger than 0.8 m
@@ -207,10 +222,11 @@ def valid_boundary(contour_poly):
     
     return True , distance
 
+
 def contour_rectangle(zi):
     zi_copy = np.uint8(zi)
-    canny_output = cv.Canny(zi_copy, 100, 100 * 2)
-    contours, _ = cv.findContours(canny_output, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
+    #canny_output = cv.Canny(zi_copy, 100, 100)
+    contours, _ = cv.findContours(zi_copy, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
     contours_poly = [None]*len(contours)
     boundRect = [None]*len(contours)
     boundary_or_not = [None]*len(contours)
@@ -224,8 +240,8 @@ def contour_rectangle(zi):
 
     print(boundary_or_not)
 
-    drawing = np.zeros((canny_output.shape[0], canny_output.shape[1], 4), dtype=np.uint8)
-    labels = np.zeros((canny_output.shape[0], canny_output.shape[1], 4), dtype=np.uint8)
+    drawing = np.zeros((zi_copy.shape[0], zi_copy.shape[1], 4), dtype=np.uint8)
+    labels = np.zeros((zi_copy.shape[0], zi_copy.shape[1], 4), dtype=np.uint8)
 
     for i in range(len(contours)):
         if boundary_or_not[i]:
@@ -237,6 +253,21 @@ def contour_rectangle(zi):
                             (grid_res - int(boundRect[i][0] - 10), grid_res - int(boundRect[i][1]) - 10), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)   
     return drawing, labels
+
+curb_arc_patch = pat.Arc((0,0), 1, 1)
+def update_ground_truth():
+    global curb_arc_patch
+    curb_arc_patch.remove()
+    ground_truth_distance = 0.001
+    try:
+        ground_truth_distance = ground_truth[plot.frame_count]
+    except:
+        print("frame_count not in ground truth")
+    curb_arc_patch = pat.Arc((0, 0), width=ground_truth_distance*2, height=ground_truth_distance*2, angle=90, 
+                        theta1=-30, theta2=30, color='magenta', linewidth=3, linestyle=':', zorder=1)
+    ax.add_patch(curb_arc_patch)
+
+    return
 
 def update(data):
 
@@ -266,6 +297,8 @@ def update(data):
     #zi = a
     zi = np.fliplr(zi)
     print ("it took %fs for griddata and flip"%(time.time() - timer_start))
+
+    update_ground_truth()
 
     if contour:
         timer_start = time.time()
@@ -333,7 +366,7 @@ if __name__ == "__main__":
         logpath = filedialog.askopenfilename()
         root.destroy()
     
-    
+    read_ground_truth()
     # ---
         
     t = np.array(range(-angle_bins//2 + 1, angle_bins//2)) * (2 / angle_bins)
@@ -384,6 +417,8 @@ if __name__ == "__main__":
         ax.add_patch(pat.Arc((0, 0), width=i*2, height=i*2, angle=90, 
                         theta1=-90, theta2=90, color='white', linewidth=0.5, linestyle=':', zorder=1))
 
+    ax.add_patch(curb_arc_patch)
+    curb_label = ax.text(-range_width * 0.9, range_width * 0.25, "Curb", color='magenta', fontsize='xx-large')
     #fig.canvas.mpl_connect('button_press_event', onclick)
 
     # choose colors here: https://stackoverflow.com/questions/22408237/named-colors-in-matplotlib
@@ -394,7 +429,7 @@ if __name__ == "__main__":
     scm_max = Slider(axcm_max, 'cm_max', 0, 10000, valinit = cm_max, valstep=500, color='brown')
 
     axthreshold = plt.axes([0.2, 0.021, 0.65, 0.02], facecolor=axcolor)
-    sthreshold = Slider(axthreshold, 'threshold', 500, 4000, valinit = threshold, valstep=100, color='brown')
+    sthreshold = Slider(axthreshold, 'threshold', 200, 4000, valinit = threshold, valstep=100, color='brown')
 
     axcontour = plt.axes([0.1, 0.04, 0.1, 0.02])
     bcontour = Button(axcontour, 'Contour', color='lightblue', hovercolor='0.9')

@@ -40,4 +40,4 @@ echo ""
 echo "resolution: $resolution m / size: $size samples"
 
 echo "start drawing..."
-python3 plot_range_azimuth_heat_map.py 2 4 $size 50 $resolution 0 0.3 $2 read
+python3 plot_range_azimuth_heat_map.py 2 4 $size 50 $resolution 0 0.2 $2 read
