@@ -42,9 +42,12 @@ def evaluate_test_data(criteria = 0.5):
                 evaluation_result.append(0)
             
             if ground_truth[i] != -1 and test_data[i] != -1:
-                true_positive += 1
                 if criteria > (ground_truth[i] - test_data[i]):
+                    true_positive += 1
                     evaluation_result.append(1)
+                else:
+                    false_positive += 1
+                    evaluation_result.append(0)
         except:
             continue    
 
