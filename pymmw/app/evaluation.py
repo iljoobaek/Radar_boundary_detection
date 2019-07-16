@@ -56,25 +56,30 @@ def evaluate_test_data(criteria = 0.5):
     print("   criteria: " + str(criteria) + " meters difference")
     print("   success: " + str(sum) + " frames" )
 
-    print("\n   Precision: How many selected items are relative?")
-    print("   Precicion: %.2f" % (100 * float(true_positive) / (true_positive + false_positive)) + "%")
-    print("\n   Recall: How many relevant items are selected?")
-    print("   Recall: %.2f" % (100 * float(true_positive) / (true_positive + false_negative)) + "%")
+    #print("\n   Precision: How many selected items are relative?")
+    print("\n   Precicion: %.2f" % (100 * float(true_positive) / (true_positive + false_positive)) + "%")
+    #print("\n   Recall: How many relevant items are selected?")
+    print("\n   Recall: %.2f" % (100 * float(true_positive) / (true_positive + false_negative)) + "%")
     
 if __name__ == "__main__":
-    logpath = ""
-    root = tk.Tk()
-    root.withdraw()
-    ground_truth_path = filedialog.askopenfilename()
+    
+
+    if len(sys.argv) == 2:
+        ground_truth_path = sys.argv[1]
+    else:
+        root = tk.Tk()
+        root.withdraw()
+        ground_truth_path = filedialog.askopenfilename()
+        root.destroy()
     read_ground_truth()
     test_path = ground_truth_path.split("ground_truth_")[0] + "test_" + ground_truth_path.split("ground_truth_")[1]
     #test_path = filedialog.askopenfilename()
     read_test_data()
-    root.destroy()
+    
 
     print("=====\nground_truth: " + os.path.basename(ground_truth_path))
-    print("ground_truth len: " + str(len(ground_truth)))
+    print("len: " + str(len(ground_truth)))
     print("\ntest_data: " + os.path.basename(test_path))
-    print("test_data len: " + str(len(test_data)))
+    print("len: " + str(len(test_data)))
 
     evaluate_test_data()

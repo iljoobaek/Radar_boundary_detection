@@ -53,7 +53,7 @@ cm_max = COLORMAP_MAX
 # And use decision-based method on the contours.
 threshold = COLOR_THRESHOLD
 contour = True
-plot.flush_test_data = True
+""" plot.flush_test_data = True """
 
 # ---------------------------------------------------------- #
 # ---------------------------------------------------------- #
@@ -225,6 +225,9 @@ def noise_removal(boundary_or_not, distance, contours_poly):
         if boundary_or_not[i] :
             object_index.append(i)
 
+    if len(object_index) == 0:
+        return boundary_or_not
+    
     # print("===== boundary_or_not")
     # print(boundary_or_not)
 
@@ -257,6 +260,8 @@ def noise_removal(boundary_or_not, distance, contours_poly):
 
     if not only_clusters:
         boundary_or_not[index_cluster[last_cluster][-1]] = True
+    else:
+        boundary_or_not[object_index[-1]] = True
 
     return boundary_or_not
 
