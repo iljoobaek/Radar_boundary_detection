@@ -41,7 +41,7 @@ import socket
 # --- Constants --- #
 
 COLORMAP_MAX = 3000
-COLOR_THRESHOLD = 1200
+COLOR_THRESHOLD = 1800
 host = '127.0.0.1'
 port = 12345
 s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
@@ -55,7 +55,7 @@ cm_max = COLORMAP_MAX
 # Current algorithm for object detection is color thresholding + Canny edge detection to get contour
 # And use decision-based method on the contours.
 threshold = COLOR_THRESHOLD
-contour = False
+contour = True
 
 # ----- Helper functions for buttons and sliders ----- #
 def cm_max_update(val):
@@ -135,7 +135,7 @@ def valid_boundary(contour_poly):
     if criteria < 8:
         criteria = 8
     #print("distance: " + str(distance) + " criteria: " + str(criteria) + " degrees")
-    message = '00000000000000000000000000000000000000000000000000000000000'
+    message = '0' * 59
     # distance variance shouldn't be larger than 0.8 m
     if variance > 0.8:
         return [False, message] 
@@ -143,7 +143,7 @@ def valid_boundary(contour_poly):
     if angle_span < criteria:
         return [False, message]
     # objects within 80 cm are discarded, since the housing is giving near-field noise.
-    if distance < 0.8:
+    if distance < 1.0:
         return [False, message]
 
     length = distance * 2 * math.pi * angle_span / 360.
@@ -166,6 +166,7 @@ def valid_boundary(contour_poly):
         message = ','.join([str(length)[0:14], str(width)[0:14], str(distance)[0:14], str(angle_span)[0:14]])
     #data = s.recv(1024)
     s.send(message.encode('ascii'))
+    print(message)
     #print('Received from the server :',str(data.decode('ascii'))) 
 
     return [True, message]

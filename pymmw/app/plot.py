@@ -60,11 +60,11 @@ PACKET_SIZE_DEFAULT = PAYLOAD_START + PAYLOAD_SIZE_DEFAULT
 
 # ----- Name of device ----- #
 
-device_name = '/dev/tty.usbmodem000000004'
+device_name = '/dev/ttyACM1'
 
 # ----- File name of log ----- #
 
-filename = "/home/droid/Radar_boundary_detection/pymmw/app/DATA/binary-2019-07-01-22-18-58.dat"
+filename = "../DATA/binary-2019-07-01-22-18-58.dat"
 
 # ----- Magic Word ----- #
 magic_word = "0201040306050807"
