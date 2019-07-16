@@ -169,6 +169,14 @@ def backward_update(event):
 # ---------------------------------------------------------- #
 # ---------------------------------------------------------- #
 # ---------------------------------------------------------- #
+# ----- Helper function - Angle Span ----- #
+def angle_span_interp(distance):
+    # Currently:
+    # Distance: 0m   Span: at least 30 degrees
+    # Distance: 15m  Span: at least 6 degrees
+    # (interpolations between 0m and 15m)
+    return (30 + (30 - 6) / (0 - 15) * distance)
+
 # ----- Helper function - first step: generating possible objects ----- #
 def valid_boundary(contour_poly):
     origin = (199.5 , 0)
@@ -196,11 +204,7 @@ def valid_boundary(contour_poly):
     #print("angle_max, angle_min: " + str(angle_max) + "," + str(angle_min))
     distance = image_res * (distance_max + distance_min) / 2
     
-    # Currently:
-    # Distance: 0m   Span: at least 30 degrees
-    # Distance: 15m  Span: at least 6 degrees
-    # (interpolations between 0m and 15m)
-    criteria = (30 + (30 - 6) / (0 - 15) * distance)
+    criteria = angle_span_interp(distance)
 
     #print("distance: " + str(distance) + " criteria: " + str(criteria) + " degrees")
 
@@ -418,6 +422,14 @@ def update(data):
         cm.set_clim(0, cm_max)  # reset colormap
         #return zi
 
+# ----- Helper function to update angle span interpolation ----- #
+def add_angle_span_arc():
+    for dist in range(1 , int(range_depth)):
+        angle_span = angle_span_interp(dist)
+        angle_span_arc = pat.Arc((0, 0), width=dist*2, height=dist*2, angle=90, 
+                        theta1=-angle_span/2, theta2=angle_span/2, color='yellow', linewidth=3, linestyle=':', zorder=1)
+        ax.add_patch(angle_span_arc)
+    
 # ---------------------------------------------------------- #
 # ---------------------------------------------------------- #
 # ---------------------------------------------------------- #
@@ -519,6 +531,7 @@ if __name__ == "__main__":
                         theta1=-90, theta2=90, color='white', linewidth=0.5, linestyle=':', zorder=1))
 
     ax.add_patch(curb_arc_patch)
+    #add_angle_span_arc()
     curb_label = ax.text(-range_width * 0.9, range_width * 0.25, "Curb", color='magenta', fontsize='xx-large')
     #fig.canvas.mpl_connect('button_press_event', onclick)
 

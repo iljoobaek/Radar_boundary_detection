@@ -57,7 +57,7 @@ def evaluate_test_data(criteria = 0.5):
     print("   success: " + str(sum) + " frames" )
 
     #print("\n   Precision: How many selected items are relative?")
-    print("\n   Precicion: %.2f" % (100 * float(true_positive) / (true_positive + false_positive)) + "%")
+    print("\n   Precision: %.2f" % (100 * float(true_positive) / (true_positive + false_positive)) + "%")
     #print("\n   Recall: How many relevant items are selected?")
     print("\n   Recall: %.2f" % (100 * float(true_positive) / (true_positive + false_negative)) + "%")
     
