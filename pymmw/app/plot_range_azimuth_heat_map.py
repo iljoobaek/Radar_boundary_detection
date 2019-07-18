@@ -37,6 +37,7 @@ except ImportError:
 '''
 
 import socket
+import time
 
 # --- Constants --- #
 
@@ -56,6 +57,8 @@ cm_max = COLORMAP_MAX
 # And use decision-based method on the contours.
 threshold = COLOR_THRESHOLD
 contour = True
+
+current_milli_time = lambda: int(round(time.time() * 1000))
 
 # ----- Helper functions for buttons and sliders ----- #
 def cm_max_update(val):
@@ -95,6 +98,7 @@ def valid_boundary(contour_poly):
     if firstRun:
         s.connect((host,port))
         firstRun = False
+        print(str(current_milli_time()) + " time")
     origin = (199.5 , 0)
     distance_max = 0.0      # unit is index
     distance_min = 1000.0   # unit is index
@@ -135,16 +139,15 @@ def valid_boundary(contour_poly):
     if criteria < 8:
         criteria = 8
     #print("distance: " + str(distance) + " criteria: " + str(criteria) + " degrees")
-    message = '0' * 59
     # distance variance shouldn't be larger than 0.8 m
     if variance > 0.8:
-        return [False, message] 
+        return [False, ''] 
     # angle span should be larger
     if angle_span < criteria:
-        return [False, message]
+        return [False, '']
     # objects within 80 cm are discarded, since the housing is giving near-field noise.
-    if distance < 1.0:
-        return [False, message]
+    if distance < 1.0 or distance > 2.:
+        return [False, '']
 
     length = distance * 2 * math.pi * angle_span / 360.
     width = cv2.contourArea(contour_poly) * image_res**2 / length
@@ -165,8 +168,6 @@ def valid_boundary(contour_poly):
     else:
         message = ','.join([str(length)[0:14], str(width)[0:14], str(distance)[0:14], str(angle_span)[0:14]])
     #data = s.recv(1024)
-    s.send(message.encode('ascii'))
-    print(message)
     #print('Received from the server :',str(data.decode('ascii'))) 
 
     return [True, message]
@@ -178,18 +179,23 @@ def contour_rectangle(zi):
     contours_poly = [None]*len(contours)
     boundRect = [None]*len(contours)
     boundary_or_not = [None]*len(contours)
-    serverSend = ""
+    messages = [None]*len(contours)
     for i, c in enumerate(contours):
         contours_poly[i] = cv.approxPolyDP(c, 0.01, True)
         #print("shape of contour_poly[" + str(i) + "] " + str(contours_poly[i].shape))
         #print(contours_poly[i])
         boundRect[i] = cv.boundingRect(contours_poly[i])
-        boundary_or_not[i], message = valid_boundary(contours_poly[i])[0], valid_boundary(contours_poly[i])[1]
-        serverSend += message
-    #s.send(serverSend[0:118].encode('ascii'))
-    #print(serverSend)
-
-    print(boundary_or_not)
+        boundary_or_not[i], messages[i] = valid_boundary(contours_poly[i])[0], valid_boundary(contours_poly[i])[1]
+    if not any(boundary_or_not):
+        s.send(('0'*59).encode('ascii'))
+    else:
+        #Extracts a list of true indices in boundary_or_not, generates a list of corresponding contours, finds the max contours by area and its index and gets thats corresponding message)
+        try:
+            message = messages[contours_poly.index(max([contours_poly[i] for i in [i for i, x in enumerate(boundary_or_not) if x] if True], key = lambda x: cv2.contourArea(x)))]
+        except ValueError:
+            message = '0'*59
+        s.send(message.encode('ascii'))
+    #print(boundary_or_not)
 
     drawing = np.zeros((canny_output.shape[0], canny_output.shape[1], 4), dtype=np.uint8)
 

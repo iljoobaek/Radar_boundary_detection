@@ -18,6 +18,8 @@ from mpl_toolkits.mplot3d import art3d
 
 # ------------------------------------------------------------------------------------------- #
 
+current_milli_time = lambda: int(round(time.time() * 1000))
+
 def set_aspect_equal_3d(ax):  # axis have to be equal 
 
     xlim = ax.get_xlim3d()
@@ -390,7 +392,7 @@ def bytes_from_log(filename, chunksize=PACKET_SIZE-8):
 # ----- prepare the bytevec ----- #
 def init():
     global bytevec
-    for b in bytes_from_log(filename, PACKET_SIZE_DEFAULT - 8):
+    for b in bytes_from_log(filename, PACKET_SIZE_DEFAULT -  8):
         bytevec.append(bytes([b]))
 
     print("len of bytevec: " + str(len(bytevec)))
@@ -421,6 +423,7 @@ def update_plot_from_file(fig, ax, func):
             print("[update_plot] len of datamap['azimuth']: " + str(len(datamap['azimuth'])))
             frame_count += 1
         else:
+            print(str(current_milli_time()) + " time")
             print("[update_plot] wait for data...")
             time.sleep(1)
             continue
