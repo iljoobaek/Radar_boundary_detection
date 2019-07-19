@@ -53,7 +53,7 @@ cm_max = COLORMAP_MAX
 # And use decision-based method on the contours.
 threshold = COLOR_THRESHOLD
 contour = True
-""" plot.flush_test_data = True """
+#plot.flush_test_data = True
 
 # ---------------------------------------------------------- #
 # ---------------------------------------------------------- #
@@ -178,18 +178,25 @@ def angle_span_interp(distance):
     return (30 + (30 - 6) / (0 - 15) * distance)
 
 # ----- Helper function - first step: generating possible objects ----- #
+def generate_distance_index(distances):
+    mean = np.mean(distances)
+    std = np.std(distances)
+    return mean - 2 * std
+
 def valid_boundary(contour_poly):
     origin = (199.5 , 0)
     distance_max = 0.0      # unit is index
     distance_min = 1000.0   # unit is index
     angle_max = -180.0
     angle_min = 180.0
+    distances = []
     for point in contour_poly:
         dist = np.linalg.norm(point - origin)
         if dist > distance_max:
             distance_max = dist
         if dist < distance_min:
             distance_min = dist
+        distances.append(dist)
 
         angle = np.angle((point[0][0] - origin[0]) + point[0][1] * 1j , deg=True)
         if angle > angle_max:
@@ -202,15 +209,15 @@ def valid_boundary(contour_poly):
     
     angle_span = angle_max - angle_min
     #print("angle_max, angle_min: " + str(angle_max) + "," + str(angle_min))
-    distance = image_res * (distance_max + distance_min) / 2
+    distance = image_res * generate_distance_index(distances)
     
     criteria = angle_span_interp(distance)
 
     #print("distance: " + str(distance) + " criteria: " + str(criteria) + " degrees")
 
     # distance variance shouldn't be larger than 0.8 m
-    if variance > 0.8:
-        return False , distance
+    # if variance > 0.8:
+    #     return False , distance
 
     # angle span should be larger
     if angle_span < criteria:
@@ -251,11 +258,15 @@ def noise_removal(boundary_or_not, distance, contours_poly):
     # print("===== index_cluster")
     # print(index_cluster)
 
+    outlier = -1
     only_clusters = True
     last_cluster = -1
     for i in range(len(index_cluster)):
         if len(index_cluster[i]) == 1:
             only_clusters = False
+            if i > outlier:
+                outlier = i
+        else:
             if i > last_cluster:
                 last_cluster = i
     
@@ -263,7 +274,10 @@ def noise_removal(boundary_or_not, distance, contours_poly):
         boundary_or_not[i] = False        
 
     if not only_clusters:
-        boundary_or_not[index_cluster[last_cluster][-1]] = True
+        if outlier > last_cluster:
+            boundary_or_not[index_cluster[outlier][0]] = True
+        else:
+            boundary_or_not[index_cluster[last_cluster][-1]] = True
     else:
         boundary_or_not[object_index[-1]] = True
 
@@ -440,7 +454,7 @@ if __name__ == "__main__":
     # plot.frame_count = 200
     # print("frame_count: " + str(plot.frame_count))
 
-    if len(sys.argv[1:]) != 9:
+    if len(sys.argv[1:]) < 9:
         print('Usage: {} {}'.format(sys.argv[0].split(os.sep)[-1], 
             '<num_tx_azim_antenna> <num_rx_antenna> <num_range_bin> <num_angular_bin> <range_bin> <range_bias> <scope> <trunc> <read/serial>'))
         sys.exit(1)
@@ -479,6 +493,10 @@ if __name__ == "__main__":
         logpath = filedialog.askopenfilename()
         root.destroy()
     
+    if read_serial == 'test':
+        plot.flush_test_data = True
+        logpath = sys.argv[10]
+
     read_ground_truth()
     # ---
         
@@ -574,7 +592,7 @@ if __name__ == "__main__":
     
     if read_serial == 'serial':
         start_plot(fig, ax, update)
-    elif read_serial == 'read':
+    elif read_serial == 'read' or read_serial == 'test':
         replay_plot(fig, ax, update, logpath)
     elif read_serial == 'ground_truth':
         fig.canvas.mpl_connect('button_press_event', onclick)
