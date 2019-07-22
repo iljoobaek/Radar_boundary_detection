@@ -189,7 +189,10 @@ def contour_rectangle(zi):
     try:
         message = messages[contours_poly.index(max([contours_poly[j] for j in [i for i, x in enumerate(boundary_or_not) if x]], key = lambda x:cv2.contourArea(x)))]
     except ValueError:
-        message = messages[[i for i, x in enumerate(boundary_or_not) if x][0]]
+        try:
+            message = messages[[i for i, x in enumerate(boundary_or_not) if x][0]]
+        except IndexError:
+            message = '0' * 59
     s.send(message.encode('ascii'))
     print(boundary_or_not)
 
