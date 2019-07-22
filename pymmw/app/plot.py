@@ -7,7 +7,7 @@
 # abstract plot support
 #
 
-import sys, time, threading, json, queue, serial, datetime, cv2
+import sys, time, threading, json, queue, serial, datetime, cv2, os, signal
 
 import numpy as np
 
@@ -48,6 +48,7 @@ def move_figure(fig, xy):
 
 # ------------------------------------------------------------------------------------------- #
 
+flush_test_data = False
 
 # ----- Some numbers about payload manipulation ----- #
 # Now this only support packet with 1 TLV and azimuth heat map specific.
@@ -328,7 +329,7 @@ def start_plot(fig, ax, func):
 # ------------------------------------------------------------------------------------------- #
 # ----- Spawning threads: data from file ----- #
 queueMax = 1
-def replay_plot(fig, ax, func, filepath):
+def replay_plot(fig, ax, func, filepath, ground_truth=False):
     global filename
     filename = filepath
     print("\n***** filename: " + filename + " *****\n")
@@ -350,7 +351,9 @@ def replay_plot(fig, ax, func, filepath):
 
     # The thread will get data from queue when available.
     # Then construct complex number array, put it in datamap and pass it back to main script for plotting.
-    threading.Thread(target=update_plot_from_file, args=(fig, ax, func)).start()
+    plot_thread = threading.Thread(target=update_plot_from_file, args=(fig, ax, func, ground_truth))
+    plot_thread.daemon = True
+    plot_thread.start()
     #update_plot_from_file(fig, bytevecQueue, func)
     
     
@@ -400,10 +403,10 @@ def init():
 
 # ----- Thread: Replay plot ----- #
 # ----- Update the plot from log ----- #
-def update_plot_from_file(fig, ax, func):
+def update_plot_from_file(fig, ax, func, ground_truth):
     
     count = 0
-
+    ending = 5
     while True:
         global frame_count
         global bytevec
@@ -422,18 +425,25 @@ def update_plot_from_file(fig, ax, func):
             print ("it took %fs for update_map()"%(time.time() - timer_start))
             print("[update_plot] len of datamap['azimuth']: " + str(len(datamap['azimuth'])))
             frame_count += 1
+            print("[update] frame_count: " + str(frame_count))
         else:
-            print(str(current_milli_time()) + " time")
-            print("[update_plot] wait for data...")
+            print("[update_plot] That's all. Ending in " + str(ending) + " seconds")
             time.sleep(1)
+            ending -= 1
+            if ending <= 0:
+                os.kill(os.getpid(), signal.SIGINT)
+                sys.exit(0)
             continue
             
 
         try:
-            fig.canvas.draw_idle()
+            if not flush_test_data:
+                fig.canvas.draw_idle()
             count += 1
             ax.set_title('Azimuth-Range FFT Heatmap: ' + str(frame_count) + ' frames', fontsize=16)
             fig.canvas.set_window_title("frame: " + str(frame_count))
+            if ground_truth:
+                plt.waitforbuttonpress()
             #time.sleep(10000)
             time.sleep(1e-6)
         except:

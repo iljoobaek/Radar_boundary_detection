@@ -8,6 +8,7 @@
 #
 
 import os, sys, copy, math
+from math import sqrt
 import cv2 as cv
 import random as rng
 rng.seed(12345)
@@ -56,6 +57,86 @@ cm_max = COLORMAP_MAX
 # And use decision-based method on the contours.
 threshold = COLOR_THRESHOLD
 contour = True
+#plot.flush_test_data = True
+
+# ---------------------------------------------------------- #
+# ---------------------------------------------------------- #
+# ---------------------------------------------------------- #
+# ----- Helper function for generating ground truth ----- #
+# ----- log the mouse click ----- #
+# Mouse left click indicates a detected object. Right click implies not found.
+mouse_in_heatmap = False
+def onclick(event):
+    if not mouse_in_heatmap:
+        print("[on-click] mouse not in heatmap. Not logged.")
+        return
+    #print("[on-click] frame_count: " + str(plot.frame_count))
+    print('[on-click] %s click: button=%d, x=%d, y=%d, xdata=%f, ydata=%f' %
+          ('double' if event.dblclick else 'single', event.button,
+           event.x, event.y, event.xdata, event.ydata))
+    if event.button == 3:
+        flush_ground_truth(plot.frame_count, -1)
+    else:
+        point = np.zeros((2,1))
+        point[0] = event.xdata
+        point[1] = event.ydata
+        origin = np.zeros((2,1))
+        dist = np.linalg.norm(point - origin)
+        flush_ground_truth(plot.frame_count, dist)
+
+def enter_axes(event):
+    if type(event.inaxes) == type(ax): 
+        print("in heatmap")
+        global mouse_in_heatmap
+        mouse_in_heatmap = True
+        #print('enter_axes', event.inaxes)
+        event.inaxes.patch.set_facecolor('white')
+        event.canvas.draw()
+
+def leave_axes(event):
+    global mouse_in_heatmap
+    mouse_in_heatmap = False
+    #print('leave_axes', event.inaxes)
+    event.inaxes.patch.set_facecolor('yellow')
+    event.canvas.draw()
+
+# ----- flush the data into ground_truth.txt ----- #
+# distance will be -1 if no object detected.
+last_frame_count = 0
+def flush_ground_truth(frame_count, distance):
+    global last_frame_count
+    if frame_count == last_frame_count:
+        print("[flush_ground_truth] click too fast - last: %d this: %d" % (last_frame_count, frame_count))
+        print("[flush_ground_truth] skip!")
+        return
+    print("[flush_ground_truth] frame_count: %d distance: %f" % (frame_count, distance))
+    #print(os.path.basename(logpath).strip(".dat"))
+    ground_truth_path = "DATA/ground_truth_" + os.path.basename(logpath).strip(".dat") + ".txt"
+    with open(ground_truth_path, "a") as f:
+        data = str(frame_count) + ',' + ("%.5f" % distance) + '\n'
+        f.write(data)
+    f.close()
+    last_frame_count = frame_count
+    print("[flush_ground_truth] data flushed!")
+    return
+
+# ----- Read ground truth data from text file ----- #
+ground_truth = {}
+def read_ground_truth():
+    ground_truth_path = "DATA/ground_truth_" + os.path.basename(logpath).strip(".dat") + ".txt"
+    with open(ground_truth_path, "r") as f:
+        for line in f:
+            ground_truth[int(line.split(',')[0])] = float(line.split(',')[1])
+    return
+
+# ----- flush the detected distance into test.txt ----- #
+def flush_test(frame_count, distance):
+    test_path = "DATA/test_" + os.path.basename(logpath).strip(".dat") + ".txt"
+    with open(test_path, "a") as f:
+        data = str(frame_count) + ',' + ("%.5f" % distance) + '\n'
+        f.write(data)
+    f.close()
+    return
 
 # ----- Helper functions for buttons and sliders ----- #
 def cm_max_update(val):
@@ -75,6 +156,7 @@ def contour_update(event):
         cm_max = COLORMAP_MAX
     else:
         threshold = COLOR_THRESHOLD
+    plot.frame_count -= 1
 
 def forward_update(event):
     if read_serial == 'serial':
@@ -90,6 +172,23 @@ def backward_update(event):
 
 # ------------------------------------------------ #
 firstRun = True
+# ---------------------------------------------------------- #
+# ---------------------------------------------------------- #
+# ---------------------------------------------------------- #
+# ----- Helper function - Angle Span ----- #
+def angle_span_interp(distance):
+    # Currently:
+    # Distance: 0m   Span: at least 30 degrees
+    # Distance: 15m  Span: at least 6 degrees
+    # (interpolations between 0m and 15m)
+    return (30 + (30 - 6) / (0 - 15) * distance)
+
+# ----- Helper function - first step: generating possible objects ----- #
+def generate_distance_index(distances):
+    mean = np.mean(distances)
+    std = np.std(distances)
+    return mean - 2 * std
+
 def valid_boundary(contour_poly):
     global firstRun
     if firstRun:
@@ -100,90 +199,178 @@ def valid_boundary(contour_poly):
     distance_min = 1000.0   # unit is index
     angle_max = -180.0
     angle_min = 180.0
-    # x_max = 0 
-    # x_min = 1000
-    # y_max = 0
-    # y_min = 1000
+    distances = []
     for point in contour_poly:
-        #print(point)
         dist = np.linalg.norm(point - origin)
         if dist > distance_max:
             distance_max = dist
         if dist < distance_min:
             distance_min = dist
+        distances.append(dist)
 
         angle = np.angle((point[0][0] - origin[0]) + point[0][1] * 1j , deg=True)
         if angle > angle_max:
             angle_max = angle
         if angle < angle_min:
             angle_min = angle
-        # if point[0][0] > x_max:
-        #     x_max = point[0][0]
-        # if point[0][0] < x_min:
-        #     x_min = point[0][0]
-        # if point[0][1] > y_max:
-        #     y_max = point[0][1]
-        # if point[0][1] < y_min:
-        #     y_min = point[0][1]
     
     image_res = range_res * range_bins / grid_res
     variance = (distance_max - distance_min) * image_res  # unit is meter
     
     angle_span = angle_max - angle_min
+    #print("angle_max, angle_min: " + str(angle_max) + "," + str(angle_min))
+    #distance = image_res * generate_distance_index(distances)
     distance = image_res * (distance_max + distance_min) / 2
-    criteria = 0.1 / (2 * distance * math.pi) * 360
-    if criteria < 8:
-        criteria = 8
+
+    criteria = angle_span_interp(distance)
+
     #print("distance: " + str(distance) + " criteria: " + str(criteria) + " degrees")
     message = '0' * 59
     # distance variance shouldn't be larger than 0.8 m
-    if variance > 0.8:
-        return [False, message] 
+    # if variance > 0.8:
+    #     return False , distance
+
     # angle span should be larger
     if angle_span < criteria:
-        return [False, message]
+        return False , distance, message
+
     # objects within 80 cm are discarded, since the housing is giving near-field noise.
-    if distance < 0.5 or distance > 3.5:
-        return [False, message]
+    if distance < 0.8 or distance > 4.0:
+        return False , distance, message
 
     length = distance * 2 * math.pi * angle_span / 360.
     width = cv2.contourArea(contour_poly) * image_res**2 / length
 
-    #print("x_max   x_min   y_max   y_min")
-    #print(str(x_max) + "     " + str(x_min) + "     " + str(y_max) + "     " + str(y_min))
-    #print("=== rectangle center x,y = " + str(image_res * ((x_max + x_min) / 2 - origin[0])) 
-    #                     + "," + str(image_res * ((y_max + y_min) / 2 - origin[1])) + " ===")
-    #print("distance_max,distance_min = " + str(distance_max * image_res) + "," + str(distance_min * image_res))
-    #print("image_res: " + str(image_res) + " variance: " + str(variance))
-    #print("")
-    
-
-    #message = str(x_max) + "     " + str(x_min) + "     " + str(y_max) + "     " + str(y_min) + "     "  + str(distance_max * image_res) + "," + str(distance_min * image_res)
-    #message = "length: " + str(length) + " width: " + str(width) + " distance: " + str(distance)
     if width == 0.0:
         message = ','.join([str(length)[0:14], "0.000000000000", str(distance)[0:14], str(angle_span)[0:14]])
     else:
         message = ','.join([str(length)[0:14], str(width)[0:14], str(distance)[0:14], str(angle_span)[0:14]])
-    #data = s.recv(1024)
-    #print('Received from the server :',str(data.decode('ascii'))) 
 
-    return [True, message]
+    return True, distance, message
 
+# ----- Helper function - second step: making decisions ----- #
+def noise_removal(boundary_or_not, distance, contours_poly):
+    object_index = []
+    for i in range(len(boundary_or_not)):
+        if boundary_or_not[i] :
+            object_index.append(i)
+
+    if len(object_index) == 0:
+        return boundary_or_not
+    
+    # print("===== boundary_or_not")
+    # print(boundary_or_not)
+
+    # print("===== object_index")
+    # print(object_index)
+    # print("===== distance")
+    # for i in range(len(distance)):
+    #     try:
+    #         object_index.index(i)
+    #         print(distance[i], end=',')
+    #     except:
+    #         continue
+    # print("")
+
+    index_cluster = cluster_by_distance(object_index, distance)
+    
+    # print("===== index_cluster")
+    # print(index_cluster)
+
+    outlier = -1
+    only_clusters = True
+    last_cluster = -1
+    for i in range(len(index_cluster)):
+        if len(index_cluster[i]) == 1:
+            only_clusters = False
+            if i > outlier:
+                outlier = i
+        else:
+            if i > last_cluster:
+                last_cluster = i
+    
+    for i in range(len(boundary_or_not)):
+        boundary_or_not[i] = False        
+
+    if not only_clusters:
+        if outlier > last_cluster:
+            boundary_or_not[index_cluster[outlier][0]] = True
+        else:
+            boundary_or_not[index_cluster[last_cluster][-1]] = True
+    else:
+        boundary_or_not[object_index[-1]] = True
+
+    return boundary_or_not
+
+""" 
+def filter_by_area(boundary_or_not, distance, contours_poly):
+    
+    return boundary_or_not """
+
+# ----- Helper function for clustering: mean of list ----- #
+def mean(lst):
+    n = float(len(lst))
+    mean = sum(lst) / n
+    # stdev = sqrt((sum(x*x for x in lst) / n) - (mean * mean)) 
+    return mean
+
+# ----- Helper function for clustering ----- #
+# ----- generating clusters by checking the distance to mean ----- #
+def process(distance, object_index, criteria=1):
+    dist_cluster = []
+    index_cluster = []
+    for i in range(len(distance)):
+        try:
+            object_index.index(i)
+        except:
+            continue
+
+        if len(dist_cluster) < 1:    # the first two values are going directly in
+            dist_cluster.append(distance[i])
+            index_cluster.append(i)
+            continue
+
+        cluster_mean = mean(dist_cluster)
+        if abs(cluster_mean - distance[i]) > criteria:    # check the "distance"
+            yield index_cluster
+            dist_cluster[:] = []    # reset cluster to the empty list
+            index_cluster[:] = []    # reset cluster to the empty list
+
+        dist_cluster.append(distance[i])
+        index_cluster.append(i)
+    yield index_cluster
+
+# ----- clustering by distance ----- #
+def cluster_by_distance(object_index, distance):
+    ret = []
+    for cluster in process(distance, object_index):
+        ret.append(cluster.copy())
+        #ret.append(cluster)
+    return ret
+
+# ----- Main function for object detection: generating contour & rectangles ----- #
 def contour_rectangle(zi):
     zi_copy = np.uint8(zi)
-    canny_output = cv.Canny(zi_copy, 100, 100 * 2)
-    contours, _ = cv.findContours(canny_output, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
+    #canny_output = cv.Canny(zi_copy, 100, 100)
+    contours, _ = cv.findContours(zi_copy, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
     contours_poly = [None]*len(contours)
     boundRect = [None]*len(contours)
     boundary_or_not = [None]*len(contours)
     messages = [None]*len(contours)
+    distance = [None]*len(contours)
     for i, c in enumerate(contours):
         contours_poly[i] = cv.approxPolyDP(c, 0.01, True)
         #print("shape of contour_poly[" + str(i) + "] " + str(contours_poly[i].shape))
         #print(contours_poly[i])
         boundRect[i] = cv.boundingRect(contours_poly[i])
-        boundary_or_not[i], message = valid_boundary(contours_poly[i])[0], valid_boundary(contours_poly[i])[1]
-        messages[i] = message
+        boundary_or_not[i],distance[i],messages[i]  = valid_boundary(contours_poly[i])
+
+    try:
+        boundary_or_not = noise_removal(boundary_or_not, distance, contours_poly)
+    except TypeError:
+        pass
+
+    message = '0' * 59
     if not any(boundary_or_not):
         message = '0' * 59
     try:
@@ -194,18 +381,43 @@ def contour_rectangle(zi):
         except IndexError:
             message = '0' * 59
     s.send(message.encode('ascii'))
-    print(boundary_or_not)
+    
+    drawing = np.zeros((zi_copy.shape[0], zi_copy.shape[1], 4), dtype=np.uint8)
+    labels = np.zeros((zi_copy.shape[0], zi_copy.shape[1], 4), dtype=np.uint8)
 
-    drawing = np.zeros((canny_output.shape[0], canny_output.shape[1], 4), dtype=np.uint8)
-
+    ret_dist = -1
     for i in range(len(contours)):
         if boundary_or_not[i]:
             color = (rng.randint(0,256), rng.randint(0,256), rng.randint(0,256))
             cv.drawContours(drawing, contours_poly, i, color)
             cv.rectangle(drawing, (int(boundRect[i][0]), int(boundRect[i][1])), 
-            (int(boundRect[i][0]+boundRect[i][2]), int(boundRect[i][1]+boundRect[i][3])), color, 2)   
-    return drawing
+            (int(boundRect[i][0]+boundRect[i][2]), int(boundRect[i][1]+boundRect[i][3])), color, 2)
+            cv.putText(labels, ("%.4f" % distance[i]), 
+                            (grid_res - int(boundRect[i][0] - 10), grid_res - int(boundRect[i][1]) - 10), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)   
+            ret_dist = distance[i]
+    return drawing, labels, ret_dist
 
+# ---------------------------------------------------------- #
+# ---------------------------------------------------------- #
+# ---------------------------------------------------------- #
+# ----- Helper function to put ground_truth on plot ----- #
+curb_arc_patch = pat.Arc((0,0), 1, 1)
+def update_ground_truth():
+    global curb_arc_patch
+    curb_arc_patch.remove()
+    ground_truth_distance = 0.001
+    try:
+        ground_truth_distance = ground_truth[plot.frame_count]
+    except:
+        print("frame_count not in ground truth")
+    curb_arc_patch = pat.Arc((0, 0), width=ground_truth_distance*2, height=ground_truth_distance*2, angle=90, 
+                        theta1=-30, theta2=30, color='magenta', linewidth=3, linestyle=':', zorder=1)
+    ax.add_patch(curb_arc_patch)
+    return
+
+
+# ----- Main function for updating the plot ----- #
 def update(data):
 
     global bshowcm_max, cm_max, threshold
@@ -235,12 +447,16 @@ def update(data):
     zi = np.fliplr(zi)
     print ("it took %fs for griddata and flip"%(time.time() - timer_start))
 
+    update_ground_truth()
+
     if contour:
         timer_start = time.time()
         cm_max = 255
         ret, zi = cv.threshold(zi,threshold,cm_max,cv.THRESH_BINARY)
-        drawing = contour_rectangle(zi)
-        cm.set_array(drawing[::-1,::-1,0] + zi[::-1,::-1])
+        drawing, labels, ret_dist = contour_rectangle(zi)
+        cm.set_array(drawing[::-1,::-1,0] + zi[::-1,::-1] + labels[:,:,0])
+        if plot.flush_test_data:
+            flush_test(plot.frame_count, ret_dist)
         #cm.set_array(drawing[::-1,::-1,0])
         print ("it took %fs for creating contour"%(time.time() - timer_start))
     else:
@@ -255,14 +471,25 @@ def update(data):
         cm.set_clim(0, cm_max)  # reset colormap
         #return zi
 
-
+# ----- Helper function to update angle span interpolation ----- #
+def add_angle_span_arc():
+    for dist in range(1 , int(range_depth)):
+        angle_span = angle_span_interp(dist)
+        angle_span_arc = pat.Arc((0, 0), width=dist*2, height=dist*2, angle=90, 
+                        theta1=-angle_span/2, theta2=angle_span/2, color='yellow', linewidth=3, linestyle=':', zorder=1)
+        ax.add_patch(angle_span_arc)
+    
+# ---------------------------------------------------------- #
+# ---------------------------------------------------------- #
+# ---------------------------------------------------------- #
+# ----- Application Entry ----- #
 if __name__ == "__main__":
 
 
     # plot.frame_count = 200
     # print("frame_count: " + str(plot.frame_count))
 
-    if len(sys.argv[1:]) != 9:
+    if len(sys.argv[1:]) < 9:
         print('Usage: {} {}'.format(sys.argv[0].split(os.sep)[-1], 
             '<num_tx_azim_antenna> <num_rx_antenna> <num_range_bin> <num_angular_bin> <range_bin> <range_bias> <scope> <trunc> <read/serial>'))
         sys.exit(1)
@@ -295,13 +522,17 @@ if __name__ == "__main__":
 
     read_serial = sys.argv[9]
     logpath = ""
-    if read_serial == 'read':
+    if read_serial == 'read' or read_serial == 'ground_truth':
         root = tk.Tk()
         root.withdraw()
         logpath = filedialog.askopenfilename()
         root.destroy()
     
-    
+    if read_serial == 'test':
+        plot.flush_test_data = True
+        logpath = sys.argv[10]
+
+    read_ground_truth()
     # ---
         
     t = np.array(range(-angle_bins//2 + 1, angle_bins//2)) * (2 / angle_bins)
@@ -352,6 +583,9 @@ if __name__ == "__main__":
         ax.add_patch(pat.Arc((0, 0), width=i*2, height=i*2, angle=90, 
                         theta1=-90, theta2=90, color='white', linewidth=0.5, linestyle=':', zorder=1))
 
+    ax.add_patch(curb_arc_patch)
+    #add_angle_span_arc()
+    curb_label = ax.text(-range_width * 0.9, range_width * 0.25, "Curb", color='magenta', fontsize='xx-large')
     #fig.canvas.mpl_connect('button_press_event', onclick)
 
     # choose colors here: https://stackoverflow.com/questions/22408237/named-colors-in-matplotlib
@@ -362,7 +596,7 @@ if __name__ == "__main__":
     scm_max = Slider(axcm_max, 'cm_max', 0, 10000, valinit = cm_max, valstep=500, color='brown')
 
     axthreshold = plt.axes([0.2, 0.021, 0.65, 0.02], facecolor=axcolor)
-    sthreshold = Slider(axthreshold, 'threshold', 500, 4000, valinit = threshold, valstep=100, color='brown')
+    sthreshold = Slider(axthreshold, 'threshold', 200, 4000, valinit = threshold, valstep=100, color='brown')
 
     axcontour = plt.axes([0.1, 0.04, 0.1, 0.02])
     bcontour = Button(axcontour, 'Contour', color='lightblue', hovercolor='0.9')
@@ -390,11 +624,16 @@ if __name__ == "__main__":
     bbackward.on_clicked(backward_update)
 
     # --- Start the core of application based on serial or replay --- #
-
+    
     if read_serial == 'serial':
         start_plot(fig, ax, update)
-    elif read_serial == 'read':
+    elif read_serial == 'read' or read_serial == 'test':
         replay_plot(fig, ax, update, logpath)
+    elif read_serial == 'ground_truth':
+        fig.canvas.mpl_connect('button_press_event', onclick)
+        fig.canvas.mpl_connect('axes_enter_event', enter_axes)
+        fig.canvas.mpl_connect('axes_leave_event', leave_axes)
+        replay_plot(fig, ax, update, logpath, False)
     s.close()
     ''' 
     except Exception:

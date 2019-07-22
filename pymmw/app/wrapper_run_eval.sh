@@ -1,0 +1,1 @@
+source run_eval.sh | grep -e ground -e test -e Precision -e Recall

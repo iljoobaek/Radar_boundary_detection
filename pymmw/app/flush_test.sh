@@ -31,13 +31,20 @@ elif [[ "$2" == "0.625" ]]; then
     size="160"
 fi
 
-echo "===== sleep 3 seconds to ramp up application ====="
-for ((i = 0 ; i < 3 ; i++)); do
-  echo -n "."
-  sleep 1
-done
-echo ""
+
 echo "resolution: $resolution m / size: $size samples"
 
-echo "start drawing..."
-python3 plot_range_azimuth_heat_map.py 2 4 $size 50 $resolution 0 0.2 $2 read
+echo "remove old test files"
+rm DATA/test*
+
+for file in DATA/*.dat; do
+    echo "Processing $file..."
+    echo "===== sleep 3 seconds to ramp up application ====="
+    for ((i = 0 ; i < 3 ; i++)); do
+        echo -n "."
+        sleep 1
+    done
+    echo ""
+    echo "Starting..."
+    python3 plot_range_azimuth_heat_map.py 2 4 $size 50 $resolution 0 0.2 $2 test $file
+done
