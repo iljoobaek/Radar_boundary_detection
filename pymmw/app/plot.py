@@ -406,7 +406,7 @@ def init():
 def update_plot_from_file(fig, ax, func, ground_truth):
     
     count = 0
-    ending = 5
+    ending = 100
     while True:
         global frame_count
         global bytevec

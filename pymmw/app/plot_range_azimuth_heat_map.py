@@ -42,9 +42,9 @@ import socket
 # --- Constants --- #
 
 COLORMAP_MAX = 3000
-COLOR_THRESHOLD = 1800
+COLOR_THRESHOLD = 800
 host = '127.0.0.1'
-port = 12345
+port = 12348
 s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 
 # ------------------------------------------------
@@ -111,7 +111,8 @@ def flush_ground_truth(frame_count, distance):
         return
     print("[flush_ground_truth] frame_count: %d distance: %f" % (frame_count, distance))
     #print(os.path.basename(logpath).strip(".dat"))
-    ground_truth_path = "DATA/ground_truth_" + os.path.basename(logpath).strip(".dat") + ".txt"
+    #ground_truth_path = "DATA/ground_truth_" + os.path.basename(logpath).strip(".dat") + ".txt"
+    ground_truth_path = "DATA/ground_truth_fake.txt"
     with open(ground_truth_path, "a") as f:
         data = str(frame_count) + ',' + ("%.5f" % distance) + '\n'
         f.write(data)
@@ -123,7 +124,8 @@ def flush_ground_truth(frame_count, distance):
 # ----- Read ground truth data from text file ----- #
 ground_truth = {}
 def read_ground_truth():
-    ground_truth_path = "DATA/ground_truth_" + os.path.basename(logpath).strip(".dat") + ".txt"
+    #ground_truth_path = "DATA/ground_truth_" + os.path.basename(logpath).strip(".dat") + ".txt"
+    ground_truth_path = "DATA/ground_truth_fake.txt"
     with open(ground_truth_path, "r") as f:
         for line in f:
             ground_truth[int(line.split(',')[0])] = float(line.split(',')[1])
@@ -235,9 +237,10 @@ def valid_boundary(contour_poly):
         return False , distance, message
 
     # objects within 80 cm are discarded, since the housing is giving near-field noise.
-    if distance < 0.8 or distance > 4.0:
+    if distance < 0.4 or distance > 5.0:
         return False , distance, message
 
+    #print("distance: " + str(distance))
     length = distance * 2 * math.pi * angle_span / 360.
     width = cv2.contourArea(contour_poly) * image_res**2 / length
 
