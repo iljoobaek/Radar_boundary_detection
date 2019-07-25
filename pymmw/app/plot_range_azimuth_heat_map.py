@@ -44,7 +44,7 @@ import socket
 COLORMAP_MAX = 3000
 COLOR_THRESHOLD = 800
 host = '127.0.0.1'
-port = 12348
+port = 12342
 s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 
 # ------------------------------------------------
@@ -227,7 +227,7 @@ def valid_boundary(contour_poly):
     criteria = angle_span_interp(distance)
 
     #print("distance: " + str(distance) + " criteria: " + str(criteria) + " degrees")
-    message = '0' * 59
+    message = '0' * 29
     # distance variance shouldn't be larger than 0.8 m
     # if variance > 0.8:
     #     return False , distance
@@ -244,10 +244,7 @@ def valid_boundary(contour_poly):
     length = distance * 2 * math.pi * angle_span / 360.
     width = cv2.contourArea(contour_poly) * image_res**2 / length
 
-    if width == 0.0:
-        message = ','.join([str(length)[0:14], "0.000000000000", str(distance)[0:14], str(angle_span)[0:14]])
-    else:
-        message = ','.join([str(length)[0:14], str(width)[0:14], str(distance)[0:14], str(angle_span)[0:14]])
+    message = ','.join([str(length)[0:14],str(distance)[0:14]])
 
     return True, distance, message
 
@@ -373,16 +370,16 @@ def contour_rectangle(zi):
     except TypeError:
         pass
 
-    message = '0' * 59
+    message = '0' * 29
     if not any(boundary_or_not):
-        message = '0' * 59
+        message = '0' * 29
     try:
         message = messages[contours_poly.index(max([contours_poly[j] for j in [i for i, x in enumerate(boundary_or_not) if x]], key = lambda x:cv2.contourArea(x)))]
     except ValueError:
         try:
             message = messages[[i for i, x in enumerate(boundary_or_not) if x][0]]
         except IndexError:
-            message = '0' * 59
+            message = '0' * 29
     s.send(message.encode('ascii'))
     
     drawing = np.zeros((zi_copy.shape[0], zi_copy.shape[1], 4), dtype=np.uint8)
@@ -421,8 +418,11 @@ def update_ground_truth():
 
 
 # ----- Main function for updating the plot ----- #
-def update(data):
-
+def update(data, message=''):
+    if message is not '':
+        s.send(message.encode('ascii'))
+        return
+    
     global bshowcm_max, cm_max, threshold
     bshowcm_max.label.set_text("CM_MAX: " + str(int(cm_max)) + "\nThreshold: " + str(int(threshold))
                         + "\nAngle Bins: " + str(angle_bins)

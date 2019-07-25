@@ -427,6 +427,8 @@ def update_plot_from_file(fig, ax, func, ground_truth):
             frame_count += 1
             print("[update] frame_count: " + str(frame_count))
         else:
+            message = '9' * 29
+            func(datamap,message)
             print("[update_plot] That's all. Ending in " + str(ending) + " seconds")
             time.sleep(1)
             ending -= 1
