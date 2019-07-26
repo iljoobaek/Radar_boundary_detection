@@ -42,9 +42,9 @@ import socket
 # --- Constants --- #
 
 COLORMAP_MAX = 3000
-COLOR_THRESHOLD = 800
+COLOR_THRESHOLD = 250
 host = '127.0.0.1'
-port = 12342
+port = 12344
 s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 
 # ------------------------------------------------
@@ -237,7 +237,7 @@ def valid_boundary(contour_poly):
         return False , distance, message
 
     # objects within 80 cm are discarded, since the housing is giving near-field noise.
-    if distance < 0.4 or distance > 5.0:
+    if distance < 2.9 or distance > 4.0:
         return False , distance, message
 
     #print("distance: " + str(distance))
