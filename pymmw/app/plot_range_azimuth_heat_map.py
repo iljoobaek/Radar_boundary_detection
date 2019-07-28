@@ -53,7 +53,6 @@ cm_max = COLORMAP_MAX
 # And use decision-based method on the contours.
 threshold = COLOR_THRESHOLD
 contour = True
-#plot.flush_test_data = True
 
 # ---------------------------------------------------------- #
 # ---------------------------------------------------------- #
@@ -66,19 +65,22 @@ def onclick(event):
     if not mouse_in_heatmap:
         print("[on-click] mouse not in heatmap. Not logged.")
         return
-    #print("[on-click] frame_count: " + str(plot.frame_count))
-    print('[on-click] %s click: button=%d, x=%d, y=%d, xdata=%f, ydata=%f' %
-          ('double' if event.dblclick else 'single', event.button,
-           event.x, event.y, event.xdata, event.ydata))
-    if event.button == 3:
-        flush_ground_truth(plot.frame_count, -1)
-    else:
-        point = np.zeros((2,1))
-        point[0] = event.xdata
-        point[1] = event.ydata
-        origin = np.zeros((2,1))
-        dist = np.linalg.norm(point - origin)
-        flush_ground_truth(plot.frame_count, dist)
+    
+    try:
+        print('[on-click] %s click: button=%d, x=%d, y=%d, xdata=%f, ydata=%f' %
+            ('double' if event.dblclick else 'single', event.button,
+            event.x, event.y, event.xdata, event.ydata))
+        if event.button == 3:
+            flush_ground_truth(plot.frame_count, -1)
+        else:
+            point = np.zeros((2,1))
+            point[0] = event.xdata
+            point[1] = event.ydata
+            origin = np.zeros((2,1))
+            dist = np.linalg.norm(point - origin)
+            flush_ground_truth(plot.frame_count, dist)
+    except:
+        print("[on-click] exception: probably scrolled")
 
 def enter_axes(event):
     if type(event.inaxes) == type(ax): 
@@ -108,6 +110,9 @@ def flush_ground_truth(frame_count, distance):
     print("[flush_ground_truth] frame_count: %d distance: %f" % (frame_count, distance))
     #print(os.path.basename(logpath).strip(".dat"))
     ground_truth_path = "DATA/ground_truth_" + os.path.basename(logpath).strip(".dat") + ".txt"
+    if read_serial == 'temporary':
+        ground_truth_path = ground_truth_path.replace('ground_truth', 'temporary_ground_truth')
+    
     with open(ground_truth_path, "a") as f:
         data = str(frame_count) + ',' + ("%.5f" % distance) + '\n'
         f.write(data)
@@ -487,7 +492,7 @@ if __name__ == "__main__":
 
     read_serial = sys.argv[9]
     logpath = ""
-    if read_serial == 'read' or read_serial == 'ground_truth':
+    if read_serial == 'read' or read_serial == 'ground_truth' or read_serial == 'temporary':
         root = tk.Tk()
         root.withdraw()
         logpath = filedialog.askopenfilename()
@@ -497,7 +502,10 @@ if __name__ == "__main__":
         plot.flush_test_data = True
         logpath = sys.argv[10]
 
-    read_ground_truth()
+    try:
+        read_ground_truth()
+    except:
+        print("No ground truth yet!")
     # ---
         
     t = np.array(range(-angle_bins//2 + 1, angle_bins//2)) * (2 / angle_bins)
@@ -594,7 +602,7 @@ if __name__ == "__main__":
         start_plot(fig, ax, update)
     elif read_serial == 'read' or read_serial == 'test':
         replay_plot(fig, ax, update, logpath)
-    elif read_serial == 'ground_truth':
+    elif read_serial == 'ground_truth' or read_serial == 'temporary':
         fig.canvas.mpl_connect('button_press_event', onclick)
         fig.canvas.mpl_connect('axes_enter_event', enter_axes)
         fig.canvas.mpl_connect('axes_leave_event', leave_axes)

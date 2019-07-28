@@ -21,7 +21,7 @@ def read_test_data():
 # False positive — actual = 0, predicted = 1
 # False negative — actual = 1, predicted = 0
 # True negative — actual = 0, predicted = 0
-def evaluate_test_data(criteria = 0.5):
+def evaluate_test_data(criteria = 0.2):
     evaluation_result = []
     true_positive = 0
     false_positive = 0
@@ -66,7 +66,7 @@ def evaluate_test_data(criteria = 0.5):
     
 if __name__ == "__main__":
     
-
+    criteria = 0.5
     if len(sys.argv) == 2:
         ground_truth_path = sys.argv[1]
     else:
