@@ -388,6 +388,7 @@ def contour_rectangle(zi):
                         tracker_enabled = False
                         tracker_box = []
                         tracker_failure = 0
+                        tracker = cv.TrackerKCF_create()
 
             cv.putText(labels, ("%.4f" % distance[i]), 
                             (grid_res - int(boundRect[i][0] - 10), grid_res - int(boundRect[i][1]) - 10), 
