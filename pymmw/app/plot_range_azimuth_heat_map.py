@@ -335,6 +335,7 @@ def cluster_by_distance(object_index, distance):
     return ret
 
 # ----- Main function for object detection: generating contour & rectangles ----- #
+tracker_box = []
 def contour_rectangle(zi):
     zi_copy = np.uint8(zi)
     #canny_output = cv.Canny(zi_copy, 100, 100)
@@ -356,12 +357,36 @@ def contour_rectangle(zi):
     labels = np.zeros((zi_copy.shape[0], zi_copy.shape[1], 4), dtype=np.uint8)
 
     ret_dist = -1
+    
     for i in range(len(contours)):
         if boundary_or_not[i]:
             color = (rng.randint(0,256), rng.randint(0,256), rng.randint(0,256))
             cv.drawContours(drawing, contours_poly, i, color)
             cv.rectangle(drawing, (int(boundRect[i][0]), int(boundRect[i][1])), 
             (int(boundRect[i][0]+boundRect[i][2]), int(boundRect[i][1]+boundRect[i][3])), color, 2)
+
+            global tracker_box, tracker, tracker_enabled, tracker_failure
+            if len(tracker_box) == 0:
+                tracker_box = boundRect[i]
+            
+            else:
+                if not tracker_enabled:
+                    tracker.init(zi_copy, tracker_box)
+                    tracker_enabled = True
+                else:
+                    sucess, box = tracker.update(zi_copy)
+                    if sucess:
+                        print("tracker success!")
+                        cv.rectangle(drawing, (int(box[0]), int(box[1])), 
+                                (int(box[0]+box[2]), int(box[1]+box[3])), (255,255,0), 8)
+                    else:
+                        tracker_failure += 1
+                        print("tracker_failure: " + str(tracker_failure))
+                    if tracker_failure > 8:
+                        tracker_enabled = False
+                        tracker_box = []
+                        tracker_failure = 0
+
             cv.putText(labels, ("%.4f" % distance[i]), 
                             (grid_res - int(boundRect[i][0] - 10), grid_res - int(boundRect[i][1]) - 10), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)   
@@ -386,7 +411,9 @@ def update_ground_truth():
     ax.add_patch(curb_arc_patch)
     return
 
-
+# ---------------------------------------------------------- #
+# ---------------------------------------------------------- #
+# ---------------------------------------------------------- #
 # ----- Main function for updating the plot ----- #
 def update(data):
 
@@ -506,6 +533,11 @@ if __name__ == "__main__":
         read_ground_truth()
     except:
         print("No ground truth yet!")
+    
+
+    tracker = cv.TrackerKCF_create()
+    tracker_enabled = False
+    tracker_failure = 0
     # ---
         
     t = np.array(range(-angle_bins//2 + 1, angle_bins//2)) * (2 / angle_bins)
