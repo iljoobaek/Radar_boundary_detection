@@ -365,17 +365,19 @@ def contour_rectangle(zi):
             cv.rectangle(drawing, (int(boundRect[i][0]), int(boundRect[i][1])), 
             (int(boundRect[i][0]+boundRect[i][2]), int(boundRect[i][1]+boundRect[i][3])), color, 2)
 
-            global tracker_box, tracker, tracker_enabled, tracker_failure
+            global tracker_box
             if len(tracker_box) == 0:
                 tracker_box = boundRect[i]
             
             else:
+                global tracker, tracker_enabled, tracker_failure
                 if not tracker_enabled:
                     tracker.init(zi_copy, tracker_box)
                     tracker_enabled = True
                 else:
                     sucess, box = tracker.update(zi_copy)
                     if sucess:
+                        tracker_failure = 0
                         print("tracker success!")
                         cv.rectangle(drawing, (int(box[0]), int(box[1])), 
                                 (int(box[0]+box[2]), int(box[1]+box[3])), (255,255,0), 8)
