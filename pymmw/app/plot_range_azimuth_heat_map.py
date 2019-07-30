@@ -49,8 +49,6 @@ COLOR_THRESHOLD = 700
 cm_max = COLORMAP_MAX
 
 # Object detection will be turned-on if contour is true
-# Current algorithm for object detection is color thresholding + Canny edge detection to get contour
-# And use decision-based method on the contours.
 threshold = COLOR_THRESHOLD
 contour = True
 
@@ -87,14 +85,12 @@ def enter_axes(event):
         print("in heatmap")
         global mouse_in_heatmap
         mouse_in_heatmap = True
-        #print('enter_axes', event.inaxes)
         event.inaxes.patch.set_facecolor('white')
         event.canvas.draw()
 
 def leave_axes(event):
     global mouse_in_heatmap
     mouse_in_heatmap = False
-    #print('leave_axes', event.inaxes)
     event.inaxes.patch.set_facecolor('yellow')
     event.canvas.draw()
 
@@ -108,8 +104,10 @@ def flush_ground_truth(frame_count, distance):
         print("[flush_ground_truth] skip!")
         return
     print("[flush_ground_truth] frame_count: %d distance: %f" % (frame_count, distance))
-    #print(os.path.basename(logpath).strip(".dat"))
     ground_truth_path = "DATA/ground_truth_" + os.path.basename(logpath).strip(".dat") + ".txt"
+
+    # if the script is running temporary to generate ground truth of temporary objects,
+    # change the file name to temporary_gtound_truth
     if read_serial == 'temporary':
         ground_truth_path = ground_truth_path.replace('ground_truth', 'temporary_ground_truth')
     
@@ -183,11 +181,16 @@ def angle_span_interp(distance):
     return (30 + (30 - 6) / (0 - 15) * distance)
 
 # ----- Helper function - first step: generating possible objects ----- #
+# get the distribution of the distances of the contour points.
+# then return the closer side of the contour
 def generate_distance_index(distances):
     mean = np.mean(distances)
     std = np.std(distances)
     return mean - 2 * std
 
+# core of first step:
+# make decision based on angle span
+# return the distance of the boundary
 def valid_boundary(contour_poly):
     origin = (199.5 , 0)
     distance_max = 0.0      # unit is index
@@ -213,16 +216,12 @@ def valid_boundary(contour_poly):
     variance = (distance_max - distance_min) * image_res  # unit is meter
     
     angle_span = angle_max - angle_min
-    #print("angle_max, angle_min: " + str(angle_max) + "," + str(angle_min))
-    distance = image_res * generate_distance_index(distances)
     
+    # get the distance of the boundary
+    distance = image_res * generate_distance_index(distances)
+
+    # get the angle span criteria with the distance
     criteria = angle_span_interp(distance)
-
-    #print("distance: " + str(distance) + " criteria: " + str(criteria) + " degrees")
-
-    # distance variance shouldn't be larger than 0.8 m
-    # if variance > 0.8:
-    #     return False , distance
 
     # angle span should be larger
     if angle_span < criteria:
@@ -235,33 +234,54 @@ def valid_boundary(contour_poly):
     return True , distance
 
 # ----- Helper function - second step: making decisions ----- #
-def noise_removal(boundary_or_not, distance, contours_poly):
+def box_distance(box):
+    origin = (199.5, 0)
+    close_dist = 1000
+    far_dist = 1000
+    image_res = range_res * range_bins / grid_res
+    # store the left bottom point as close value
+    point = np.asarray([box[0],box[1]])
+    close_dist = np.linalg.norm(point - origin) * image_res
+    # store the right bottom point as close value if it's closer to origin
+    point = np.asarray([box[0]+box[2], box[1]])
+    if close_dist > np.linalg.norm(point - origin) * image_res:
+        close_dist = np.linalg.norm(point - origin) * image_res
+
+    # store the left top point as close value
+    point = np.asarray([box[0],box[1]+box[3]])
+    far_dist = np.linalg.norm(point - origin) * image_res
+    # store the right top point as close value if it's closer to origin
+    point = np.asarray([box[0]+box[2],box[1]+box[3]])
+    if far_dist > np.linalg.norm(point - origin) * image_res:
+        far_dist = np.linalg.norm(point - origin) * image_res
+    
+    if close_dist > far_dist:
+        tmp = close_dist
+        close_dist = far_dist
+        far_dist = tmp
+
+    return close_dist, far_dist
+
+def noise_removal(boundary_or_not, distance, contours_poly, zi_copy):
     object_index = []
+    # get the list of the valid objects
     for i in range(len(boundary_or_not)):
         if boundary_or_not[i] :
+            # remove the object that are not around the place the tracker reports
+            global tracker_box
+            if len(tracker_box) != 0:
+                success, box = tracker.update(zi_copy)
+                if success:
+                    close_dist, far_dist = box_distance(box)
+                    if close_dist - distance[i] > 0.5 or distance[i] - far_dist > 0.5:
+                        continue
             object_index.append(i)
 
     if len(object_index) == 0:
         return boundary_or_not
-    
-    # print("===== boundary_or_not")
-    # print(boundary_or_not)
 
-    # print("===== object_index")
-    # print(object_index)
-    # print("===== distance")
-    # for i in range(len(distance)):
-    #     try:
-    #         object_index.index(i)
-    #         print(distance[i], end=',')
-    #     except:
-    #         continue
-    # print("")
-
+    # cluster the valid objects with the distance
     index_cluster = cluster_by_distance(object_index, distance)
-    
-    # print("===== index_cluster")
-    # print(index_cluster)
 
     outlier = -1
     only_clusters = True
@@ -275,9 +295,11 @@ def noise_removal(boundary_or_not, distance, contours_poly):
             if i > last_cluster:
                 last_cluster = i
     
+    # first flip all to false
     for i in range(len(boundary_or_not)):
         boundary_or_not[i] = False        
 
+    # then flip only one to true to report the object
     if not only_clusters:
         if outlier > last_cluster:
             boundary_or_not[index_cluster[outlier][0]] = True
@@ -287,11 +309,6 @@ def noise_removal(boundary_or_not, distance, contours_poly):
         boundary_or_not[object_index[-1]] = True
 
     return boundary_or_not
-
-""" 
-def filter_by_area(boundary_or_not, distance, contours_poly):
-    
-    return boundary_or_not """
 
 # ----- Helper function for clustering: mean of list ----- #
 def mean(lst):
@@ -335,9 +352,11 @@ def cluster_by_distance(object_index, distance):
     return ret
 
 # ----- Main function for object detection: generating contour & rectangles ----- #
+tracker_box = []
+tracker = cv.TrackerKCF_create()
+tracker_failure = 0
 def contour_rectangle(zi):
     zi_copy = np.uint8(zi)
-    #canny_output = cv.Canny(zi_copy, 100, 100)
     contours, _ = cv.findContours(zi_copy, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
     contours_poly = [None]*len(contours)
     boundRect = [None]*len(contours)
@@ -345,27 +364,49 @@ def contour_rectangle(zi):
     distance = [None]*len(contours)
     for i, c in enumerate(contours):
         contours_poly[i] = cv.approxPolyDP(c, 0.01, True)
-        #print("shape of contour_poly[" + str(i) + "] " + str(contours_poly[i].shape))
-        #print(contours_poly[i])
         boundRect[i] = cv.boundingRect(contours_poly[i])
-        boundary_or_not[i],distance[i] = valid_boundary(contours_poly[i])
+        boundary_or_not[i], distance[i] = valid_boundary(contours_poly[i])
 
-    boundary_or_not = noise_removal(boundary_or_not, distance, contours_poly)
+    boundary_or_not = noise_removal(boundary_or_not, distance, contours_poly, zi_copy)
 
     drawing = np.zeros((zi_copy.shape[0], zi_copy.shape[1], 4), dtype=np.uint8)
     labels = np.zeros((zi_copy.shape[0], zi_copy.shape[1], 4), dtype=np.uint8)
 
     ret_dist = -1
+    
     for i in range(len(contours)):
         if boundary_or_not[i]:
             color = (rng.randint(0,256), rng.randint(0,256), rng.randint(0,256))
             cv.drawContours(drawing, contours_poly, i, color)
             cv.rectangle(drawing, (int(boundRect[i][0]), int(boundRect[i][1])), 
             (int(boundRect[i][0]+boundRect[i][2]), int(boundRect[i][1]+boundRect[i][3])), color, 2)
+
+            global tracker_box, tracker, tracker_failure
+            if len(tracker_box) == 0:
+                tracker_box = boundRect[i]
+                tracker.init(zi_copy, tracker_box)
+
+            else:
+                sucess, box = tracker.update(zi_copy)
+                if sucess:
+                    tracker_failure = 0
+                    print(">>> tracker success!")
+                    cv.rectangle(drawing, (int(box[0]), int(box[1])), 
+                            (int(box[0]+box[2]), int(box[1]+box[3])), (180,180,180), 8)
+                else:
+                    tracker_failure += 1
+                    print(">>> tracker_failure: " + str(tracker_failure))
+                if tracker_failure > 8:
+                    print(">>> tracker reset!")
+                    tracker_box = boundRect[i]
+                    tracker_failure = 0
+                    tracker = cv.TrackerKCF_create()
+                    tracker.init(zi_copy, tracker_box)
+
             cv.putText(labels, ("%.4f" % distance[i]), 
                             (grid_res - int(boundRect[i][0] - 10), grid_res - int(boundRect[i][1]) - 10), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)   
-            ret_dist = distance[i]
+            ret_dist = distance[i]            
     return drawing, labels, ret_dist
 
 # ---------------------------------------------------------- #
@@ -386,7 +427,9 @@ def update_ground_truth():
     ax.add_patch(curb_arc_patch)
     return
 
-
+# ---------------------------------------------------------- #
+# ---------------------------------------------------------- #
+# ---------------------------------------------------------- #
 # ----- Main function for updating the plot ----- #
 def update(data):
 
@@ -506,6 +549,9 @@ if __name__ == "__main__":
         read_ground_truth()
     except:
         print("No ground truth yet!")
+    
+
+    
     # ---
         
     t = np.array(range(-angle_bins//2 + 1, angle_bins//2)) * (2 / angle_bins)
@@ -559,6 +605,7 @@ if __name__ == "__main__":
     ax.add_patch(curb_arc_patch)
     #add_angle_span_arc()
     curb_label = ax.text(-range_width * 0.9, range_width * 0.25, "Curb", color='magenta', fontsize='xx-large')
+    tracker_label = ax.text(-range_width * 0.9, range_width * 0.4, "Tracker", color='gold', fontsize='xx-large')
     #fig.canvas.mpl_connect('button_press_event', onclick)
 
     # choose colors here: https://stackoverflow.com/questions/22408237/named-colors-in-matplotlib

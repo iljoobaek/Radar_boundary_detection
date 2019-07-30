@@ -16,6 +16,11 @@ def read_test_data():
             test_data[int(line.split(',')[0])] = float(line.split(',')[1])
     return
 
+temporary_data = {}
+def read_temporary():
+    with open(temporary_path, "r") as f:
+        for line in f:
+            temporary_data[int(line.split(',')[0])] = float(line.split(',')[1])
 
 # True positive — actual = 1, predicted = 1
 # False positive — actual = 0, predicted = 1
@@ -59,14 +64,12 @@ def evaluate_test_data(criteria = 0.2):
     print("   criteria: " + str(criteria) + " meters difference")
     print("   success: " + str(sum) + " frames" )
 
-    #print("\n   Precision: How many selected items are relative?")
     print("\n   Precision: %.2f" % (100 * float(true_positive) / (true_positive + false_positive)) + "%")
-    #print("\n   Recall: How many relevant items are selected?")
     print("\n   Recall: %.2f" % (100 * float(true_positive) / (true_positive + false_negative)) + "%")
     
 if __name__ == "__main__":
     
-    criteria = 0.5
+    criteria = 0.2
     if len(sys.argv) == 2:
         ground_truth_path = sys.argv[1]
     else:
@@ -76,13 +79,18 @@ if __name__ == "__main__":
         root.destroy()
     read_ground_truth()
     test_path = ground_truth_path.split("ground_truth_")[0] + "test_" + ground_truth_path.split("ground_truth_")[1]
-    #test_path = filedialog.askopenfilename()
     read_test_data()
-    
+
+    temporary_path = ground_truth_path.split("ground_truth_")[0] + "temporary_ground_truth_" + ground_truth_path.split("ground_truth_")[1]
+    try:
+        read_temporary()
+    except:
+        pass
+        #print("no temporary for this ground truth")
 
     print("=====\nground_truth: " + os.path.basename(ground_truth_path))
     print("len: " + str(len(ground_truth)))
     print("\ntest_data: " + os.path.basename(test_path))
     print("len: " + str(len(test_data)))
 
-    evaluate_test_data()
+    evaluate_test_data(criteria)
