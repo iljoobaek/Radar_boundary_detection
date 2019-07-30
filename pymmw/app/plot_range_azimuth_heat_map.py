@@ -37,13 +37,17 @@ except ImportError:
     sys.exit(3)
 '''
 
-# ---------------------------------------------------------- #
-# ---------------------------------------------------------- #
-# ---------------------------------------------------------- #
+import socket
+
 # --- Constants --- #
 
 COLORMAP_MAX = 3000
-COLOR_THRESHOLD = 700
+COLOR_THRESHOLD = 1500
+host = '127.0.0.1'
+port = 12345
+s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+
+# ------------------------------------------------
 
 # colormap maximum
 cm_max = COLORMAP_MAX
@@ -104,13 +108,16 @@ def flush_ground_truth(frame_count, distance):
         print("[flush_ground_truth] skip!")
         return
     print("[flush_ground_truth] frame_count: %d distance: %f" % (frame_count, distance))
+    #print(os.path.basename(logpath).strip(".dat"))
     ground_truth_path = "DATA/ground_truth_" + os.path.basename(logpath).strip(".dat") + ".txt"
-
+    ground_truth_path = "DATA/ground_truth_fake.txt"
+    
     # if the script is running temporary to generate ground truth of temporary objects,
     # change the file name to temporary_gtound_truth
     if read_serial == 'temporary':
         ground_truth_path = ground_truth_path.replace('ground_truth', 'temporary_ground_truth')
-    
+
+    #ground_truth_path = "DATA/ground_truth_" + os.path.basename(logpath).strip(".dat") + ".txt"
     with open(ground_truth_path, "a") as f:
         data = str(frame_count) + ',' + ("%.5f" % distance) + '\n'
         f.write(data)
@@ -122,7 +129,8 @@ def flush_ground_truth(frame_count, distance):
 # ----- Read ground truth data from text file ----- #
 ground_truth = {}
 def read_ground_truth():
-    ground_truth_path = "DATA/ground_truth_" + os.path.basename(logpath).strip(".dat") + ".txt"
+    #ground_truth_path = "DATA/ground_truth_" + os.path.basename(logpath).strip(".dat") + ".txt"
+    ground_truth_path = "DATA/ground_truth_fake.txt"
     with open(ground_truth_path, "r") as f:
         for line in f:
             ground_truth[int(line.split(',')[0])] = float(line.split(',')[1])
@@ -169,6 +177,8 @@ def backward_update(event):
         return
     plot.frame_count -= 100
 
+# ------------------------------------------------ #
+firstRun = True
 # ---------------------------------------------------------- #
 # ---------------------------------------------------------- #
 # ---------------------------------------------------------- #
@@ -192,6 +202,10 @@ def generate_distance_index(distances):
 # make decision based on angle span
 # return the distance of the boundary
 def valid_boundary(contour_poly):
+    global firstRun
+    if firstRun:
+        s.connect((host,port))
+        firstRun = False
     origin = (199.5 , 0)
     distance_max = 0.0      # unit is index
     distance_min = 1000.0   # unit is index
@@ -222,16 +236,23 @@ def valid_boundary(contour_poly):
 
     # get the angle span criteria with the distance
     criteria = angle_span_interp(distance)
+    
+    message = '0' * 29
 
     # angle span should be larger
     if angle_span < criteria:
-        return False , distance
+        return False , distance, message
 
     # objects within 80 cm are discarded, since the housing is giving near-field noise.
-    if distance < 0.8:
-        return False , distance
-    
-    return True , distance
+    if distance < 1.1:
+        return False , distance, message
+
+    #print("distance: " + str(distance))
+    length = distance * 2 * math.pi * angle_span / 360.
+
+    message = ','.join([str(length)[0:14],str(distance)[0:14]])
+
+    return True, distance, message
 
 # ----- Helper function - second step: making decisions ----- #
 def box_distance(box):
@@ -361,14 +382,26 @@ def contour_rectangle(zi):
     contours_poly = [None]*len(contours)
     boundRect = [None]*len(contours)
     boundary_or_not = [None]*len(contours)
+    messages = [None]*len(contours)
     distance = [None]*len(contours)
     for i, c in enumerate(contours):
         contours_poly[i] = cv.approxPolyDP(c, 0.01, True)
         boundRect[i] = cv.boundingRect(contours_poly[i])
-        boundary_or_not[i], distance[i] = valid_boundary(contours_poly[i])
-
+        boundary_or_not[i], distance[i],messages[i]  = valid_boundary(contours_poly[i])
     boundary_or_not = noise_removal(boundary_or_not, distance, contours_poly, zi_copy)
 
+    message = '0' * 29
+    if not any(boundary_or_not):
+        message = '0' * 29
+    #try:
+    #    message = messages[contours_poly.index(max([contours_poly[j] for j in [i for i, x in enumerate(boundary_or_not) if x]], key = lambda x:cv2.contourArea(x)))]
+    #except ValueError:
+    try:
+        message = messages[[i for i, x in enumerate(boundary_or_not) if x][0]]
+    except IndexError:
+        message = '0' * 29
+    s.send(message.encode('ascii'))
+    
     drawing = np.zeros((zi_copy.shape[0], zi_copy.shape[1], 4), dtype=np.uint8)
     labels = np.zeros((zi_copy.shape[0], zi_copy.shape[1], 4), dtype=np.uint8)
 
@@ -431,8 +464,11 @@ def update_ground_truth():
 # ---------------------------------------------------------- #
 # ---------------------------------------------------------- #
 # ----- Main function for updating the plot ----- #
-def update(data):
-
+def update(data, message=''):
+    if message is not '':
+        s.send(message.encode('ascii'))
+        return
+    
     global bshowcm_max, cm_max, threshold
     bshowcm_max.label.set_text("CM_MAX: " + str(int(cm_max)) + "\nThreshold: " + str(int(threshold))
                         + "\nAngle Bins: " + str(angle_bins)
@@ -653,8 +689,8 @@ if __name__ == "__main__":
         fig.canvas.mpl_connect('button_press_event', onclick)
         fig.canvas.mpl_connect('axes_enter_event', enter_axes)
         fig.canvas.mpl_connect('axes_leave_event', leave_axes)
-        replay_plot(fig, ax, update, logpath, True)
-
+        replay_plot(fig, ax, update, logpath, False)
+    s.close()
     ''' 
     except Exception:
         sys.exit(2)
