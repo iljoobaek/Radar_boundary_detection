@@ -42,7 +42,7 @@ import socket
 # --- Constants --- #
 
 COLORMAP_MAX = 3000
-COLOR_THRESHOLD = 1500
+COLOR_THRESHOLD = 700
 host = '127.0.0.1'
 port = 12345
 s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
@@ -233,7 +233,7 @@ def valid_boundary(contour_poly):
     
     # get the distance of the boundary
     distance = image_res * generate_distance_index(distances)
-
+    #distance = image_res * (distance_max + distance_min) / 2
     # get the angle span criteria with the distance
     criteria = angle_span_interp(distance)
     
@@ -244,10 +244,12 @@ def valid_boundary(contour_poly):
         return False , distance, message
 
     # objects within 80 cm are discarded, since the housing is giving near-field noise.
-    if distance < 1.1:
+    if distance < 0.8 or distance > 7.0:
         return False , distance, message
 
     #print("distance: " + str(distance))
+    if angle_span > 40 or angle_span < 60:
+        angle_span = 51.5
     length = distance * 2 * math.pi * angle_span / 360.
 
     message = ','.join([str(length)[0:14],str(distance)[0:14]])

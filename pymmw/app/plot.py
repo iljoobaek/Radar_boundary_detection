@@ -424,7 +424,7 @@ def update_plot_from_file(fig, ax, func, ground_truth):
 
             workingTime = time.time() - timer_start
             print ("it took %fs for update_map()"%(workingTime))
-            time.sleep(max((0.25-workingTime), 0))
+            #time.sleep(max((0.35-workingTime), 0))
             print ("it took %fs for frame"%(time.time() - timer_start))
             print("[update_plot] len of datamap['azimuth']: " + str(len(datamap['azimuth'])))
             frame_count += 1
