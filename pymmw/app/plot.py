@@ -272,6 +272,10 @@ def update_plot(fig, ax, q, func, loggingQueue):
             fig.canvas.draw_idle()
             ax.set_title('Azimuth-Range FFT Heatmap: ' + str(frame_count) + ' frames', fontsize=48)
             fig.canvas.set_window_title("frame: " + str(frame_count))
+            # print(" >>>>>>>>>>>>> frame_count : " + str(frame_count) + " <<<<<<<<<")
+            # print(" >>>>>>>>>>>>> frame_count : " + str(frame_count) + " <<<<<<<<<")
+            # print(" >>>>>>>>>>>>> frame_count : " + str(frame_count) + " <<<<<<<<<")
+            # print(" >>>>>>>>>>>>> frame_count : " + str(frame_count) + " <<<<<<<<<")
             
             time.sleep(1e-6) # yield the interest of scheduler
         except:
