@@ -236,25 +236,16 @@ def valid_boundary(contour_poly):
     #distance = image_res * (distance_max + distance_min) / 2
     # get the angle span criteria with the distance
     criteria = angle_span_interp(distance)
-    
-    message = '0' * 29
 
     # angle span should be larger
     if angle_span < criteria:
-        return False , distance, message
+        return False , distance, angle_span
 
     # objects within 80 cm are discarded, since the housing is giving near-field noise.
-    if distance < 0.8 or distance > 7.0:
-        return False , distance, message
-
-    #print("distance: " + str(distance))
-    if angle_span > 40 or angle_span < 60:
-        angle_span = 51.5
-    length = distance * 2 * math.pi * angle_span / 360.
-
-    message = ','.join([str(length)[0:14],str(distance)[0:14]])
-
-    return True, distance, message
+    if distance < 0.8:
+        return False , distance, angle_span
+    
+    return True , distance, angle_span
 
 # ----- Helper function - second step: making decisions ----- #
 def box_distance(box):
@@ -287,19 +278,29 @@ def box_distance(box):
 
 def noise_removal(boundary_or_not, distance, contours_poly, zi_copy):
     object_index = []
+    global tracker_box, tracker_mismatch
     # get the list of the valid objects
+    match, mismatch = 0,0
     for i in range(len(boundary_or_not)):
         if boundary_or_not[i] :
             # remove the object that are not around the place the tracker reports
-            global tracker_box
             if len(tracker_box) != 0:
                 success, box = tracker.update(zi_copy)
                 if success:
                     close_dist, far_dist = box_distance(box)
+                    print("close_dist: %f far_dist: %f distance[i]: %f" % (close_dist, far_dist, distance[i]))
                     if close_dist - distance[i] > 0.5 or distance[i] - far_dist > 0.5:
+                        boundary_or_not[i] = False
+                        mismatch += 1
                         continue
+                    else:
+                        match += 1
             object_index.append(i)
 
+    if mismatch > match:
+        tracker_mismatch += 1
+        print(">>> tracker_mismatch: " + str(tracker_mismatch))
+    
     if len(object_index) == 0:
         return boundary_or_not
 
@@ -378,6 +379,7 @@ def cluster_by_distance(object_index, distance):
 tracker_box = []
 tracker = cv.TrackerKCF_create()
 tracker_failure = 0
+tracker_mismatch = 0
 def contour_rectangle(zi):
     zi_copy = np.uint8(zi)
     contours, _ = cv.findContours(zi_copy, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
@@ -386,29 +388,22 @@ def contour_rectangle(zi):
     boundary_or_not = [None]*len(contours)
     messages = [None]*len(contours)
     distance = [None]*len(contours)
+    angle_span = [None]*len(contours)
     for i, c in enumerate(contours):
         contours_poly[i] = cv.approxPolyDP(c, 0.01, True)
         boundRect[i] = cv.boundingRect(contours_poly[i])
-        boundary_or_not[i], distance[i],messages[i]  = valid_boundary(contours_poly[i])
-    boundary_or_not = noise_removal(boundary_or_not, distance, contours_poly, zi_copy)
+        # Karun get data here!
+        boundary_or_not[i], distance[i], angle_span[i] = valid_boundary(contours_poly[i])
+        # Karun get data here!
 
-    message = '0' * 29
-    if not any(boundary_or_not):
-        message = '0' * 29
-    #try:
-    #    message = messages[contours_poly.index(max([contours_poly[j] for j in [i for i, x in enumerate(boundary_or_not) if x]], key = lambda x:cv2.contourArea(x)))]
-    #except ValueError:
-    try:
-        message = messages[[i for i, x in enumerate(boundary_or_not) if x][0]]
-    except IndexError:
-        message = '0' * 29
-    s.send(message.encode('ascii'))
+    boundary_or_not = noise_removal(boundary_or_not, distance, contours_poly, zi_copy)
     
     drawing = np.zeros((zi_copy.shape[0], zi_copy.shape[1], 4), dtype=np.uint8)
     labels = np.zeros((zi_copy.shape[0], zi_copy.shape[1], 4), dtype=np.uint8)
 
     ret_dist = -1
     
+    global tracker_box, tracker, tracker_failure, tracker_mismatch
     for i in range(len(contours)):
         if boundary_or_not[i]:
             color = (rng.randint(0,256), rng.randint(0,256), rng.randint(0,256))
@@ -416,32 +411,38 @@ def contour_rectangle(zi):
             cv.rectangle(drawing, (int(boundRect[i][0]), int(boundRect[i][1])), 
             (int(boundRect[i][0]+boundRect[i][2]), int(boundRect[i][1]+boundRect[i][3])), color, 2)
 
-            global tracker_box, tracker, tracker_failure
             if len(tracker_box) == 0:
                 tracker_box = boundRect[i]
                 tracker.init(zi_copy, tracker_box)
 
-            else:
-                sucess, box = tracker.update(zi_copy)
-                if sucess:
-                    tracker_failure = 0
-                    print(">>> tracker success!")
-                    cv.rectangle(drawing, (int(box[0]), int(box[1])), 
-                            (int(box[0]+box[2]), int(box[1]+box[3])), (180,180,180), 8)
-                else:
-                    tracker_failure += 1
-                    print(">>> tracker_failure: " + str(tracker_failure))
-                if tracker_failure > 8:
-                    print(">>> tracker reset!")
-                    tracker_box = boundRect[i]
-                    tracker_failure = 0
-                    tracker = cv.TrackerKCF_create()
-                    tracker.init(zi_copy, tracker_box)
-
             cv.putText(labels, ("%.4f" % distance[i]), 
                             (grid_res - int(boundRect[i][0] - 10), grid_res - int(boundRect[i][1]) - 10), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)   
-            ret_dist = distance[i]            
+            
+            # Karun get data here!
+            ret_dist = distance[i]
+            ret_angle_span = angle_span[i]
+            # Karun get data here!
+
+
+    if len(tracker_box) != 0:
+        sucess, box = tracker.update(zi_copy)
+        if sucess:
+            tracker_failure = 0
+            print(">>> tracker success!")
+            cv.rectangle(drawing, (int(box[0]), int(box[1])), 
+                    (int(box[0]+box[2]), int(box[1]+box[3])), (180,180,180), 8)
+        else:
+            tracker_failure += 1
+            print(">>> tracker_failure: " + str(tracker_failure))
+
+    if tracker_failure > 8 or tracker_mismatch > 4:
+        print(">>> tracker reset! tracker_failure: %d tracker_mismatch: %d" %(tracker_failure, tracker_mismatch))
+        tracker_box = []
+        tracker_failure = 0
+        tracker_mismatch = 0
+        tracker = cv.TrackerKCF_create()
+    
     return drawing, labels, ret_dist
 
 # ---------------------------------------------------------- #

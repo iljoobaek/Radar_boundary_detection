@@ -69,7 +69,7 @@ def evaluate_test_data(criteria = 0.2):
     
 if __name__ == "__main__":
     
-    criteria = 0.2
+    criteria = 0.5
     if len(sys.argv) == 2:
         ground_truth_path = sys.argv[1]
     else:
