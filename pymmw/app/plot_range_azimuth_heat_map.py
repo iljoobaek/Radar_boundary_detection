@@ -43,9 +43,11 @@ import socket
 
 COLORMAP_MAX = 3000
 COLOR_THRESHOLD = 700
+
 host = '127.0.0.1'
 port = 12345
 s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+firstRun = True
 
 # ------------------------------------------------
 
@@ -177,8 +179,18 @@ def backward_update(event):
         return
     plot.frame_count -= 100
 
+def calculate_length(angle_span, distance):
+    if angle_span > 40 or angle_span < 60:
+        angle_span = 51.5
+    return distance * 2 * math.pi * angle_span / 360.
+
+def generate_data_msg(length, distance):
+    return ','.join([str(length)[0:14],str(distance)[0:14]])
+
+def send_msg(msg):
+    s.send(msg.encode('ascii'))
+    
 # ------------------------------------------------ #
-firstRun = True
 # ---------------------------------------------------------- #
 # ---------------------------------------------------------- #
 # ---------------------------------------------------------- #
@@ -204,7 +216,7 @@ def generate_distance_index(distances):
 def valid_boundary(contour_poly):
     global firstRun
     if firstRun:
-        s.connect((host,port))
+        #s.connect((host,port))
         firstRun = False
     origin = (199.5 , 0)
     distance_max = 0.0      # unit is index
@@ -386,15 +398,20 @@ def contour_rectangle(zi):
     contours_poly = [None]*len(contours)
     boundRect = [None]*len(contours)
     boundary_or_not = [None]*len(contours)
-    messages = [None]*len(contours)
     distance = [None]*len(contours)
-    angle_span = [None]*len(contours)
+    length = [None]*len(contours)
     for i, c in enumerate(contours):
         contours_poly[i] = cv.approxPolyDP(c, 0.01, True)
         boundRect[i] = cv.boundingRect(contours_poly[i])
-        # Karun get data here!
-        boundary_or_not[i], distance[i], angle_span[i] = valid_boundary(contours_poly[i])
-        # Karun get data here!
+        boundary_or_not[i], distance[i], angle_span = valid_boundary(contours_poly[i])
+        length[i] = calculate_length(distance[i], angle_span)
+    
+    if any(boundary_or_not):
+        send_msg("Start:" + str(int(time.time() * 1000000)) + "Len:" + "{0:0=3d}".format(np.sum(boundary_or_not)+1))
+    else:
+        send_msg("Start:" + str(int(time.time() * 1000000)) + "Len:000")
+    boundaryIndices = np.where(boundary_or_not)[0]
+    [send_msg(generate_data_msg(y, x)) for y, x in zip(np.take(length, boundaryIndices).tolist(), np.take(distance, boundaryIndices).tolist())]
 
     boundary_or_not = noise_removal(boundary_or_not, distance, contours_poly, zi_copy)
     
@@ -419,11 +436,8 @@ def contour_rectangle(zi):
                             (grid_res - int(boundRect[i][0] - 10), grid_res - int(boundRect[i][1]) - 10), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)   
             
-            # Karun get data here!
-            ret_dist = distance[i]
-            ret_angle_span = angle_span[i]
-            # Karun get data here!
-
+            send_msg(generate_data_msg(length[i], distance[i]))
+    send_msg("PacketFinish:" + str(int(time.time() * 1000000)))
 
     if len(tracker_box) != 0:
         sucess, box = tracker.update(zi_copy)
@@ -467,9 +481,9 @@ def update_ground_truth():
 # ---------------------------------------------------------- #
 # ---------------------------------------------------------- #
 # ----- Main function for updating the plot ----- #
-def update(data, message=''):
-    if message is not '':
-        s.send(message.encode('ascii'))
+def update(data, msg=''):
+    if msg is not '':
+        send_msg(msg)
         return
     
     global bshowcm_max, cm_max, threshold

@@ -428,14 +428,14 @@ def update_plot_from_file(fig, ax, func, ground_truth):
 
             workingTime = time.time() - timer_start
             print ("it took %fs for update_map()"%(workingTime))
-            #time.sleep(max((0.35-workingTime), 0))
+            time.sleep(max((0.25-workingTime), 0))
             print ("it took %fs for frame"%(time.time() - timer_start))
             print("[update_plot] len of datamap['azimuth']: " + str(len(datamap['azimuth'])))
             frame_count += 1
             print("[update] frame_count: " + str(frame_count))
         else:
-            message = '9' * 29
-            func(datamap,message)
+            msg = "ClientClosed:" + str(int(time.time() * 1000000))
+            func(datamap,msg)
             print("[update_plot] That's all. Ending in " + str(ending) + " seconds")
             time.sleep(1)
             ending -= 1
