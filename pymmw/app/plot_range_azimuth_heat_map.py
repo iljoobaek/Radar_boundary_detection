@@ -44,9 +44,8 @@ import socket
 COLORMAP_MAX = 3000
 COLOR_THRESHOLD = 700
 
-host = '127.0.0.1'
-port = 12345
-s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+port = "/tmp/radarPacket"
+s = socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
 firstRun = True
 
 # ------------------------------------------------
@@ -188,6 +187,7 @@ def generate_data_msg(length, distance):
     return ','.join([str(length)[0:14],str(distance)[0:14]])
 
 def send_msg(msg):
+    print(msg)
     s.send(msg.encode('ascii'))
     
 # ------------------------------------------------ #
@@ -216,7 +216,7 @@ def generate_distance_index(distances):
 def valid_boundary(contour_poly):
     global firstRun
     if firstRun:
-        #s.connect((host,port))
+        s.connect(port)
         firstRun = False
     origin = (199.5 , 0)
     distance_max = 0.0      # unit is index
