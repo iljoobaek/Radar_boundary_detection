@@ -179,8 +179,6 @@ def backward_update(event):
     plot.frame_count -= 100
 
 def calculate_length(angle_span, distance):
-    if angle_span > 40 or angle_span < 60:
-        angle_span = 51.5
     return distance * 2 * math.pi * angle_span / 360.
 
 def generate_data_msg(length, distance):
@@ -254,7 +252,7 @@ def valid_boundary(contour_poly):
         return False , distance, angle_span
 
     # objects within 80 cm are discarded, since the housing is giving near-field noise.
-    if distance < 0.8:
+    if distance < 0.3:
         return False , distance, angle_span
     
     return True , distance, angle_span
