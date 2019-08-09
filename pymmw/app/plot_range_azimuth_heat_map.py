@@ -453,15 +453,15 @@ def doppler_init(data):
 def doppler_lookup(distance):
     index = int(distance / range_res)
     #index = range_bins - index
-    print("index of %.4f is %d" % (distance, index))
+    # print("index of %.4f is %d" % (distance, index))
     profile = doppler_vec[:,index]
     # print("===== profile =====")
     # print(profile)
-    print("===================")
-    print("[doppler_lookup] index of max: " + str(np.argmax(profile)))
+    # print("===================")
+    # print("[doppler_lookup] index of max: " + str(np.argmax(profile)))
     velocity = doppler_res * (np.argmax(profile) - 7)
-    print("[doppler_lookup] velocity: " + str(velocity))
-    print("===================")
+    # print("[doppler_lookup] velocity: " + str(velocity))
+    # print("===================")
     return velocity
 
 # ---------------------------------------------------------- #
