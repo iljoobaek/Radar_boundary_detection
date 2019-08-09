@@ -32,7 +32,7 @@ elif [[ "$2" == "0.625" ]]; then
 fi
 
 echo "===== send config to device ====="
-python3 send_config.py sample_256.cfg
+python3 send_config.py with_doppler_256.cfg
 
 echo "===== sleep 5 seconds to ramp up application ====="
 for ((i = 0 ; i < 5 ; i++)); do
