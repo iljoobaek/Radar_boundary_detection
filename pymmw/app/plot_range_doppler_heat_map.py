@@ -80,11 +80,11 @@ if __name__ == "__main__":
         sys.exit(1)
         
 
-    logpath = ""
-    root = tk.Tk()
-    root.withdraw()
-    logpath = filedialog.askopenfilename()
-    root.destroy()
+    # logpath = ""
+    # root = tk.Tk()
+    # root.withdraw()
+    # logpath = filedialog.askopenfilename()
+    # root.destroy()
 
     heat_mode, heat_choice = ('rel', 'abs'), 1
     comp_mode, comp_choice = ('lin', 'log'), 0
@@ -147,6 +147,8 @@ if __name__ == "__main__":
     ax.plot([0 - range_bias, range_max - range_bias], [0, 0], color='white', linestyle=':', linewidth=0.5, zorder=1)
 
     fig.canvas.mpl_connect('button_press_event', onclick)
+
+    start_plot(fig, ax, update)
     
-    replay_plot(fig, ax, update, logpath)
+    #replay_plot(fig, ax, update, logpath)
     
