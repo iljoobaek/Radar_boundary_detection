@@ -20,7 +20,7 @@ def populate_header(index, data):
         "num_TLV": 0
     }
 
-    for i in range(0,48):
+    for i in range(0,40):
         if i < 8 and i % 2 == 0:
             header["magic_word"] += "%02x " % bytestream[index+i+1]
             header["magic_word"] += "%02x " % bytestream[index+i]
@@ -60,6 +60,9 @@ def populate_header(index, data):
     print("time_cpu_cycle: " + str(header["time_cpu_cycle"]))
     print("num of detected obj: " + str(header["num_det_obj"]))
     print("num of TLV: " + str(header["num_TLV"]))
+
+    
+    
 
 if __name__ == "__main__":
     

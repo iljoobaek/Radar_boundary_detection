@@ -58,6 +58,7 @@ PAYLOAD_SIZE_DEFAULT = 8192
 PAYLOAD_SIZE = int(PAYLOAD_SIZE_DEFAULT * PAYLOAD_TRUNC)
 PACKET_SIZE = PAYLOAD_START + PAYLOAD_SIZE
 PACKET_SIZE_DEFAULT = PAYLOAD_START + PAYLOAD_SIZE_DEFAULT
+PACKET_SIZE_DEFAULT_DOPPLER = PACKET_SIZE_DEFAULT + PAYLOAD_SIZE_DEFAULT
 
 # ----- Name of device ----- #
 
@@ -98,8 +99,10 @@ frame_count = 0
 
 bytevec = []
 datavec = []
+dopplervec = []
 datamap = {
-    'azimuth' : datavec
+    'azimuth' : datavec,
+    'doppler' : dopplervec
 }
 
 # ------------------------------------------------------------------------------------------- #
@@ -239,6 +242,15 @@ def collect_data(start,end):
             datavec.append(first)
         count += 1
 
+def collect_doppler(start,end):
+    global dopplervec
+    dopplervec.clear()
+
+    for byteindex in range(start,end,2):
+        intbyte = bytevec[byteindex] + bytevec[byteindex + 1]
+        byteint = int.from_bytes(intbyte, byteorder='little', signed=True)
+        dopplervec.append(byteint)
+
 # ----- Thread: updating the plot ----- #
 # ----- Update the plot ----- #
 def update_plot(fig, ax, q, func, loggingQueue):
@@ -338,11 +350,15 @@ def replay_plot(fig, ax, func, filepath, ground_truth=False):
 
     global PAYLOAD_SIZE, PACKET_SIZE, PAYLOAD_TRUNC
     PAYLOAD_SIZE = int(PAYLOAD_SIZE_DEFAULT * PAYLOAD_TRUNC)
+    # -----
+    PAYLOAD_SIZE = 7680
+    # -----
     PACKET_SIZE = PAYLOAD_START + PAYLOAD_SIZE
     print("PAYLOAD_SIZE_DEFAULT: " + str(PAYLOAD_SIZE_DEFAULT))
     print("PAYLOAD_TRUNC: " + str(PAYLOAD_TRUNC))
     print("PAYLOAD_SIZE: " + str(PAYLOAD_SIZE))
     print("PACKET_SIZE: " + str(PACKET_SIZE))
+    print("PACKET_SIZE_DEFAULT_DOPPLER: " + str(PACKET_SIZE_DEFAULT_DOPPLER))
 
     plt.show(block=False)
     #plt.show()
@@ -397,7 +413,7 @@ def bytes_from_log(filename, chunksize=PACKET_SIZE-8):
 # ----- prepare the bytevec ----- #
 def init():
     global bytevec
-    for b in bytes_from_log(filename, PACKET_SIZE_DEFAULT - 8):
+    for b in bytes_from_log(filename, PACKET_SIZE_DEFAULT_DOPPLER - 8):
         bytevec.append(bytes([b]))
 
     print("len of bytevec: " + str(len(bytevec)))
@@ -416,10 +432,15 @@ def update_plot_from_file(fig, ax, func, ground_truth):
         # When having a complete packet, turn that into datavec and pass it back to update()
         # Stops when the rest of file size is not long enough for another packet
         #
-        if frame_count * PACKET_SIZE_DEFAULT + PAYLOAD_START + PAYLOAD_SIZE <= len(bytevec):
-            start = frame_count * PACKET_SIZE_DEFAULT + PAYLOAD_START
-            end = frame_count * PACKET_SIZE_DEFAULT + PAYLOAD_START + PAYLOAD_SIZE
+        if frame_count * PACKET_SIZE_DEFAULT_DOPPLER + PAYLOAD_START + PAYLOAD_SIZE <= len(bytevec):
+            start = frame_count * PACKET_SIZE_DEFAULT_DOPPLER + PAYLOAD_START
+            end = frame_count * PACKET_SIZE_DEFAULT_DOPPLER + PAYLOAD_START + PAYLOAD_SIZE
             collect_data(start,end)
+
+            start = frame_count * PACKET_SIZE_DEFAULT_DOPPLER + PAYLOAD_START + PAYLOAD_SIZE_DEFAULT
+            end = start + PAYLOAD_SIZE
+            collect_doppler(start,end)
+            print("dopplervec length: " + str(len(dopplervec)))
 
             timer_start = time.time()
             func(datamap)
