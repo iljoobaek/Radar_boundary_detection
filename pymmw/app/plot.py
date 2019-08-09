@@ -363,11 +363,12 @@ def replay_plot(fig, ax, func, filepath, ground_truth=False):
     filename = filepath
     print("\n***** filename: " + filename + " *****\n")
 
-    global PAYLOAD_SIZE, PACKET_SIZE, PAYLOAD_TRUNC
+    global PAYLOAD_SIZE, PACKET_SIZE, PAYLOAD_TRUNC, PAYLOAD_SIZE_DEFAULT
     PAYLOAD_TRUNC = 1
     PAYLOAD_SIZE = int(PAYLOAD_SIZE_DEFAULT * PAYLOAD_TRUNC)
     # -----
-    #PAYLOAD_SIZE = 8192
+    # PAYLOAD_SIZE = 7680
+    PAYLOAD_SIZE_DEFAULT = 8192
     # -----
     PACKET_SIZE = PAYLOAD_START + PAYLOAD_SIZE
     print("PAYLOAD_SIZE_DEFAULT: " + str(PAYLOAD_SIZE_DEFAULT))
@@ -456,7 +457,7 @@ def update_plot_from_file(fig, ax, func, ground_truth):
             start = frame_count * PACKET_SIZE_DEFAULT_DOPPLER + PAYLOAD_START + PAYLOAD_SIZE_DEFAULT
             end = start + PAYLOAD_SIZE
             collect_doppler(start,end)
-            print("dopplervec length: " + str(len(dopplervec)))
+            #print("dopplervec length: " + str(len(dopplervec)))
 
             timer_start = time.time()
             func(datamap)

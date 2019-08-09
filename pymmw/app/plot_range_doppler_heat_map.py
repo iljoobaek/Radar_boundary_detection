@@ -63,8 +63,16 @@ def update(data):
     #a = np.fft.fftshift(a, axes=(1,))  # put left to center, put center to right
     shift = 12
     a = np.concatenate((a[:,shift:16],a[:,0:shift]) , axis=1)
-     
-    im.set_array(a[:,1:].T)  # rotate 90 degrees, cut off first doppler bin
+    a = a[:,1:].T
+    print("===== profile =====")
+    for i in range(0,15):
+        profile = a[i,:]
+        for dot in profile:
+            print(dot, end=",")
+        print("")
+    print("===================")
+    
+    im.set_array(a)  # rotate 90 degrees, cut off first doppler bin
     
     if heat_mode[heat_choice] == 'rel':
         im.autoscale()  # reset colormap
@@ -80,11 +88,11 @@ if __name__ == "__main__":
         sys.exit(1)
         
 
-    # logpath = ""
-    # root = tk.Tk()
-    # root.withdraw()
-    # logpath = filedialog.askopenfilename()
-    # root.destroy()
+    logpath = ""
+    root = tk.Tk()
+    root.withdraw()
+    logpath = filedialog.askopenfilename()
+    root.destroy()
 
     heat_mode, heat_choice = ('rel', 'abs'), 1
     comp_mode, comp_choice = ('lin', 'log'), 0
@@ -148,7 +156,7 @@ if __name__ == "__main__":
 
     fig.canvas.mpl_connect('button_press_event', onclick)
 
-    start_plot(fig, ax, update)
+    #start_plot(fig, ax, update)
     
-    #replay_plot(fig, ax, update, logpath)
+    replay_plot(fig, ax, update, logpath)
     

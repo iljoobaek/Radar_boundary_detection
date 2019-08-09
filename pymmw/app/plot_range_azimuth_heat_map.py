@@ -186,7 +186,7 @@ def angle_span_interp(distance):
 def generate_distance_index(distances):
     mean = np.mean(distances)
     std = np.std(distances)
-    return mean - 2 * std
+    return mean - 2 * std, mean
 
 # core of first step:
 # make decision based on angle span
@@ -218,20 +218,25 @@ def valid_boundary(contour_poly):
     angle_span = angle_max - angle_min
     
     # get the distance of the boundary
-    distance = image_res * generate_distance_index(distances)
+    distance, distance_middle = generate_distance_index(distances)
+    distance = image_res * distance
+    distance_middle = image_res * distance_middle
+
+    # get the velocity of it
+    velocity = doppler_lookup(distance_middle)
 
     # get the angle span criteria with the distance
     criteria = angle_span_interp(distance)
 
     # angle span should be larger
     if angle_span < criteria:
-        return False , distance, angle_span
+        return False , distance, angle_span, velocity
 
     # objects within 80 cm are discarded, since the housing is giving near-field noise.
     if distance < 0.8:
-        return False , distance, angle_span
+        return False , distance, angle_span, velocity
     
-    return True , distance, angle_span
+    return True , distance, angle_span, velocity
 
 # ----- Helper function - second step: making decisions ----- #
 def box_distance(box):
@@ -374,11 +379,12 @@ def contour_rectangle(zi):
     boundary_or_not = [None]*len(contours)
     distance = [None]*len(contours)
     angle_span = [None]*len(contours)
+    velocity = [None]*len(contours)
     for i, c in enumerate(contours):
         contours_poly[i] = cv.approxPolyDP(c, 0.01, True)
         boundRect[i] = cv.boundingRect(contours_poly[i])
         # Karun get data here!
-        boundary_or_not[i], distance[i], angle_span[i] = valid_boundary(contours_poly[i])
+        boundary_or_not[i], distance[i], angle_span[i], velocity[i] = valid_boundary(contours_poly[i])
         # Karun get data here!
 
     boundary_or_not = noise_removal(boundary_or_not, distance, contours_poly, zi_copy)
@@ -407,6 +413,7 @@ def contour_rectangle(zi):
             # Karun get data here!
             ret_dist = distance[i]
             ret_angle_span = angle_span[i]
+            ret_velocity = velocity[i]
             # Karun get data here!
 
 
@@ -429,6 +436,33 @@ def contour_rectangle(zi):
         tracker = cv.TrackerKCF_create()
     
     return drawing, labels, ret_dist
+
+
+# ----- doppler initialization ----- #
+doppler_vec = []
+def doppler_init(data):
+    global doppler_vec
+    a = np.array(data['doppler'])
+    a = np.reshape(a, (range_bins, doppler_bins))
+    shift = 12
+    a = np.concatenate((a[:,shift:16],a[:,0:shift]) , axis=1)
+    doppler_vec = a[:,1:].T
+    print("[dopplet init] shape of doppler vec: " + str(doppler_vec.shape))
+
+# ----- doppler velocity look up -----#
+def doppler_lookup(distance):
+    index = int(distance / range_res)
+    #index = range_bins - index
+    print("index of %.4f is %d" % (distance, index))
+    profile = doppler_vec[:,index]
+    # print("===== profile =====")
+    # print(profile)
+    print("===================")
+    print("[doppler_lookup] index of max: " + str(np.argmax(profile)))
+    velocity = doppler_res * (np.argmax(profile) - 7)
+    print("[doppler_lookup] velocity: " + str(velocity))
+    print("===================")
+    return velocity
 
 # ---------------------------------------------------------- #
 # ---------------------------------------------------------- #
@@ -460,7 +494,14 @@ def update(data):
                             + "\nScope: " + str(scope))
     if not 'azimuth' in data or len(data['azimuth']) != range_bins * tx_azimuth_antennas * rx_antennas * 2:
         return
-
+    
+    if not 'doppler' in data or len(data['doppler']) != range_bins * doppler_bins:
+        return
+    
+    timer_start = time.time()
+    doppler_init(data)
+    print ("it took %fs for doppler_init"%(time.time() - timer_start))
+    
     a = data['azimuth']
     timer_start = time.time()
     a = np.array([a[i] + 1j * a[i+1] for i in range(0, len(a), 2)])
@@ -538,6 +579,8 @@ if __name__ == "__main__":
     
     range_bins = int(float(sys.argv[3]))
     angle_bins = int(float(sys.argv[4]))
+    doppler_bins = 16
+    doppler_res = 0.1252
 
     # 1st 2: phasors' real and imaginary part
     # 2nd 2: 2 bytes each for real and imaginary part
