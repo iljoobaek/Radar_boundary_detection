@@ -60,6 +60,7 @@ PAYLOAD_SIZE_DEFAULT = 8192
 PAYLOAD_SIZE = int(PAYLOAD_SIZE_DEFAULT * PAYLOAD_TRUNC)
 PACKET_SIZE = PAYLOAD_START + PAYLOAD_SIZE
 PACKET_SIZE_DEFAULT = PAYLOAD_START + PAYLOAD_SIZE_DEFAULT
+PACKET_SIZE_DEFAULT_DOPPLER = PACKET_SIZE_DEFAULT + PAYLOAD_SIZE_DEFAULT
 
 # ----- Name of device ----- #
 
@@ -100,8 +101,10 @@ frame_count = 0
 
 bytevec = []
 datavec = []
+dopplervec = []
 datamap = {
-    'azimuth' : datavec
+    'azimuth' : datavec,
+    'doppler' : dopplervec
 }
 
 # ------------------------------------------------------------------------------------------- #
@@ -114,7 +117,7 @@ def from_serial(filename, chunksize=PACKET_SIZE-8):
         count = 0
         while True:
             c = f.read(1)
-            if count > 5000:
+            if count > 25000:
                 print("magic word search out of control")
                 return
             if not c:
@@ -174,16 +177,17 @@ def serial_on_the_fly(fig, q, loggingQueue):
     f = serial.Serial(device_name, 961200, timeout=1)
     while q.alive and loggingQueue.alive:
         serialvec = []
-        for b in from_serial(f, PACKET_SIZE_DEFAULT - 8):
+        for b in from_serial(f, PACKET_SIZE_DEFAULT_DOPPLER - 8):
             serialvec.append(bytes([b]))
 
-        if not verify_vec(serialvec[:PACKET_SIZE]):
-            fail_count += 1
-            total_count += 1
-            print("[serial-on-the-fly] failed: " + str(round(100 * fail_count/total_count, 2)) + " % failed")
-            continue
+        # if not verify_vec(serialvec[:PACKET_SIZE]):
+        #     fail_count += 1
+        #     total_count += 1
+        #     print("[serial-on-the-fly] failed: " + str(round(100 * fail_count/total_count, 2)) + " % failed")
+        #     continue
         total_count += 1
-        q.put(serialvec[:PACKET_SIZE])
+        q.put(serialvec)
+        # q.put(serialvec[:PACKET_SIZE])
         loggingQueue.put(serialvec)
         print("[serial-on-the-fly] serialvec enqueued! size: " + str(len(serialvec)))
         time.sleep(1e-6) # yield the interest of scheduler
@@ -231,15 +235,33 @@ def collect_data(start,end):
     first , second = 0 , 0
 
     for byteindex in range(start,end,2):
-        intbyte = bytevec[byteindex] + bytevec[byteindex + 1]
-        byteint = int.from_bytes(intbyte, byteorder='little', signed=True)
-        if count % 2 == 0:
-            first = byteint
-        if count % 2 == 1:
-            second = byteint
-            datavec.append(second)
-            datavec.append(first)
-        count += 1
+        try:
+            intbyte = bytevec[byteindex] + bytevec[byteindex + 1]
+            byteint = int.from_bytes(intbyte, byteorder='little', signed=True)
+            if count % 2 == 0:
+                first = byteint
+            if count % 2 == 1:
+                second = byteint
+                datavec.append(second)
+                datavec.append(first)
+            count += 1
+        except:
+            print("collect data fail!")
+            return
+
+def collect_doppler(start,end):
+    global dopplervec
+    dopplervec.clear()
+
+    for byteindex in range(start,end,2):
+        try:
+            intbyte = bytevec[byteindex] + bytevec[byteindex + 1]
+            byteint = int.from_bytes(intbyte, byteorder='little', signed=True)
+            dopplervec.append(byteint)
+        except:
+            print("collect doppler fail!")
+            return
+        
 
 # ----- Thread: updating the plot ----- #
 # ----- Update the plot ----- #
@@ -260,7 +282,11 @@ def update_plot(fig, ax, q, func, loggingQueue):
             start = PAYLOAD_START
             end = PAYLOAD_START + PAYLOAD_SIZE
             collect_data(start,end)
-            #loggingQueue.put(datavec)
+            
+            start = PAYLOAD_START + PAYLOAD_SIZE_DEFAULT
+            end = start + PAYLOAD_SIZE_DEFAULT
+            collect_doppler(start,end)
+
             func(datamap)
             #print("[update_plot] len of datamap['azimuth']: " + str(len(datamap['azimuth'])))
             #print("[update_plot] queue size: " + str(q.qsize()))
@@ -272,7 +298,7 @@ def update_plot(fig, ax, q, func, loggingQueue):
 
         try:
             fig.canvas.draw_idle()
-            ax.set_title('Azimuth-Range FFT Heatmap: ' + str(frame_count) + ' frames', fontsize=48)
+            #ax.set_title('Azimuth-Range FFT Heatmap: ' + str(frame_count) + ' frames', fontsize=48)
             fig.canvas.set_window_title("frame: " + str(frame_count))
             # print(" >>>>>>>>>>>>> frame_count : " + str(frame_count) + " <<<<<<<<<")
             # print(" >>>>>>>>>>>>> frame_count : " + str(frame_count) + " <<<<<<<<<")
@@ -293,6 +319,7 @@ queueMax = 1
 def start_plot(fig, ax, func):
     
     global PAYLOAD_SIZE, PACKET_SIZE, PAYLOAD_TRUNC
+    #PAYLOAD_TRUNC = 1
     PAYLOAD_SIZE = int(PAYLOAD_SIZE_DEFAULT * PAYLOAD_TRUNC)
     PACKET_SIZE = PAYLOAD_START + PAYLOAD_SIZE
     print("PAYLOAD_SIZE_DEFAULT: " + str(PAYLOAD_SIZE_DEFAULT))
@@ -338,13 +365,19 @@ def replay_plot(fig, ax, func, filepath, ground_truth=False):
     filename = filepath
     print("\n***** filename: " + filename + " *****\n")
 
-    global PAYLOAD_SIZE, PACKET_SIZE, PAYLOAD_TRUNC
+    global PAYLOAD_SIZE, PACKET_SIZE, PAYLOAD_TRUNC, PAYLOAD_SIZE_DEFAULT
+    PAYLOAD_TRUNC = 1
     PAYLOAD_SIZE = int(PAYLOAD_SIZE_DEFAULT * PAYLOAD_TRUNC)
+    # -----
+    # PAYLOAD_SIZE = 7680
+    PAYLOAD_SIZE_DEFAULT = 8192
+    # -----
     PACKET_SIZE = PAYLOAD_START + PAYLOAD_SIZE
     print("PAYLOAD_SIZE_DEFAULT: " + str(PAYLOAD_SIZE_DEFAULT))
     print("PAYLOAD_TRUNC: " + str(PAYLOAD_TRUNC))
     print("PAYLOAD_SIZE: " + str(PAYLOAD_SIZE))
     print("PACKET_SIZE: " + str(PACKET_SIZE))
+    print("PACKET_SIZE_DEFAULT_DOPPLER: " + str(PACKET_SIZE_DEFAULT_DOPPLER))
 
     plt.show(block=False)
     #plt.show()
@@ -399,7 +432,7 @@ def bytes_from_log(filename, chunksize=PACKET_SIZE-8):
 # ----- prepare the bytevec ----- #
 def init():
     global bytevec
-    for b in bytes_from_log(filename, PACKET_SIZE_DEFAULT -  8):
+    for b in bytes_from_log(filename, PACKET_SIZE_DEFAULT_DOPPLER - 8):
         bytevec.append(bytes([b]))
 
     print("len of bytevec: " + str(len(bytevec)))
@@ -418,10 +451,15 @@ def update_plot_from_file(fig, ax, func, ground_truth):
         # When having a complete packet, turn that into datavec and pass it back to update()
         # Stops when the rest of file size is not long enough for another packet
         #
-        if frame_count * PACKET_SIZE_DEFAULT + PAYLOAD_START + PAYLOAD_SIZE <= len(bytevec):
-            start = frame_count * PACKET_SIZE_DEFAULT + PAYLOAD_START
-            end = frame_count * PACKET_SIZE_DEFAULT + PAYLOAD_START + PAYLOAD_SIZE
+        if frame_count * PACKET_SIZE_DEFAULT_DOPPLER + PAYLOAD_START + PAYLOAD_SIZE <= len(bytevec):
+            start = frame_count * PACKET_SIZE_DEFAULT_DOPPLER + PAYLOAD_START
+            end = frame_count * PACKET_SIZE_DEFAULT_DOPPLER + PAYLOAD_START + PAYLOAD_SIZE
             collect_data(start,end)
+
+            start = frame_count * PACKET_SIZE_DEFAULT_DOPPLER + PAYLOAD_START + PAYLOAD_SIZE_DEFAULT
+            end = start + PAYLOAD_SIZE
+            collect_doppler(start,end)
+            #print("dopplervec length: " + str(len(dopplervec)))
 
             timer_start = time.time()
             func(datamap)
@@ -449,7 +487,7 @@ def update_plot_from_file(fig, ax, func, ground_truth):
             if not flush_test_data:
                 fig.canvas.draw_idle()
             count += 1
-            ax.set_title('Azimuth-Range FFT Heatmap: ' + str(frame_count) + ' frames', fontsize=16)
+            #ax.set_title('Azimuth-Range FFT Heatmap: ' + str(frame_count) + ' frames', fontsize=16)
             fig.canvas.set_window_title("frame: " + str(frame_count))
             if ground_truth:
                 plt.waitforbuttonpress()
