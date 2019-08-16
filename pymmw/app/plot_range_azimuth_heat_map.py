@@ -371,6 +371,7 @@ tracker_box = []
 tracker = cv.TrackerKCF_create()
 tracker_failure = 0
 tracker_mismatch = 0
+ret_dist_rolling = []
 def contour_rectangle(zi):
     zi_copy = np.uint8(zi)
     contours, _ = cv.findContours(zi_copy, cv.RETR_TREE, cv.CHAIN_APPROX_NONE)
@@ -406,8 +407,11 @@ def contour_rectangle(zi):
                 tracker_box = boundRect[i]
                 tracker.init(zi_copy, tracker_box)
 
-            cv.putText(labels, ("%.4f" % distance[i]), 
+            cv.putText(labels, ("d: %.4f" % distance[i]), 
                             (grid_res - int(boundRect[i][0] - 10), grid_res - int(boundRect[i][1]) - 10), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+            cv.putText(labels, ("v: %.4f" % velocity[i]), 
+                            (grid_res - int(boundRect[i][0] - 25), grid_res - int(boundRect[i][1]) - 25), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)   
             
             # Karun get data here!
@@ -416,7 +420,7 @@ def contour_rectangle(zi):
             ret_velocity = velocity[i]
             # Karun get data here!
 
-
+    global ret_dist_rolling
     if len(tracker_box) != 0:
         sucess, box = tracker.update(zi_copy)
         if sucess:
@@ -424,6 +428,10 @@ def contour_rectangle(zi):
             print(">>> tracker success!")
             cv.rectangle(drawing, (int(box[0]), int(box[1])), 
                     (int(box[0]+box[2]), int(box[1]+box[3])), (180,180,180), 8)
+            print(">>> ret_dist: " + str(ret_dist))
+            ret_dist_rolling.append(ret_dist)
+            ret_dist = np.mean(ret_dist_rolling)
+            print(">>> ret_dist(rolling): " + str(ret_dist))
         else:
             tracker_failure += 1
             print(">>> tracker_failure: " + str(tracker_failure))
@@ -434,6 +442,7 @@ def contour_rectangle(zi):
         tracker_failure = 0
         tracker_mismatch = 0
         tracker = cv.TrackerKCF_create()
+        ret_dist_rolling = []
     
     return drawing, labels, ret_dist
 
@@ -493,9 +502,11 @@ def update(data):
                         + "\nAngle Bins: " + str(angle_bins)
                             + "\nScope: " + str(scope))
     if not 'azimuth' in data or len(data['azimuth']) != range_bins * tx_azimuth_antennas * rx_antennas * 2:
+        #print("azimuth fail! " + str(len(data['azimuth'])))
         return
     
     if not 'doppler' in data or len(data['doppler']) != range_bins * doppler_bins:
+        #print("doppler fail! " + str(len(data['doppler'])))
         return
     
     timer_start = time.time()

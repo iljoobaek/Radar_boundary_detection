@@ -64,13 +64,13 @@ def update(data):
     shift = 12
     a = np.concatenate((a[:,shift:16],a[:,0:shift]) , axis=1)
     a = a[:,1:].T
-    print("===== profile =====")
-    for i in range(0,15):
-        profile = a[i,:]
-        for dot in profile:
-            print(dot, end=",")
-        print("")
-    print("===================")
+    # print("===== profile =====")
+    # for i in range(0,15):
+    #     profile = a[i,:]
+    #     for dot in profile:
+    #         print(dot, end=",")
+    #     print("")
+    # print("===================")
     
     im.set_array(a)  # rotate 90 degrees, cut off first doppler bin
     
