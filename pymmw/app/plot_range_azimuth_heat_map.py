@@ -429,6 +429,10 @@ def contour_rectangle(zi):
             cv.rectangle(drawing, (int(box[0]), int(box[1])), 
                     (int(box[0]+box[2]), int(box[1]+box[3])), (180,180,180), 8)
             print(">>> ret_dist: " + str(ret_dist))
+            
+            if len(ret_dist_rolling) != 0 and np.mean(ret_dist_rolling) - ret_dist > 1:
+                ret_dist_rolling = []
+            
             ret_dist_rolling.append(ret_dist)
             ret_dist = np.mean(ret_dist_rolling)
             print(">>> ret_dist(rolling): " + str(ret_dist))
