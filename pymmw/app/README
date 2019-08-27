@@ -1,0 +1,32 @@
+In config file, this line will be modified to fit the need.
+
+>>> profileCfg 0 77 219 7 89.92 0 0 6 1 512 6250 0 0 30
+
+1. To adjust the max range to be higher, change the "6" to smaller. Otherwise higher.
+   When max range goes up, the resolution will decrease.
+
+   Maximum is 44, with 4 chirps per frame.
+
+2. To adjust the resolution, adjust 512 to higher. (but 512 is the largest for this hardware)
+   But at the same time calculate the correct number and file it in the "89.92"
+
+   for example, 512 samples / 6250 * 1000 = 81.92 us.
+   Then add the 81.92 with 7 us and 1 us = 89.92 us.
+
+3. Yet the samples in 2. cannot be too large since the memory on chip is limited.
+   If the memory is not enough, the module will fail with main.c line 2177,
+   indicating that the malloc of radar cube fails.
+
+4. To adjust the max velocity, change the 219 to smaller.
+   To adjust for better velocity resolution, change the 219 to higher.
+
+
+Another line potentially needs to be changed:
+
+>>> frameCfg 0 1 4 0 333.333 1 0
+
+The 4 here is the chirp per frame, namely Doppler bins. The number couldn't be too large
+since the memory of radar cube will be too large, causing exception on datapath.c line 937 or around.
+(the real chirps per frame shown on GUI is 4 * 2 = 8. Not sure why.)
+
+8 is maximum for 512 samples. And the larger the better velocity resolution.
