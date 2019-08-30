@@ -257,7 +257,7 @@ def valid_boundary(contour_poly):
         return False , distance, angle_span, velocity
 
     # objects within 80 cm are discarded, since the housing is giving near-field noise.
-    if distance < 0.3:
+    if distance < 0.5555555555555555555555555555555555555555555555555555555:
         return False , distance, angle_span, velocity
     
     return True , distance, angle_span, velocity
