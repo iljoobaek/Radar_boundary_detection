@@ -467,7 +467,10 @@ def doppler_lookup(distance):
     index = int(distance / range_res)
     #index = range_bins - index
     # print("index of %.4f is %d" % (distance, index))
-    profile = doppler_vec[:,index]
+    try:
+        profile = doppler_vec[:,index]
+    except:
+        profile = doppler_vec[:,range_bins - 1]
     # print("===== profile =====")
     # print(profile)
     # print("===================")

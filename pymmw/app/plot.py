@@ -364,11 +364,12 @@ def replay_plot(fig, ax, func, filepath, ground_truth=False):
     print("\n***** filename: " + filename + " *****\n")
 
     global PAYLOAD_SIZE, PACKET_SIZE, PAYLOAD_TRUNC, PAYLOAD_SIZE_DEFAULT
-    PAYLOAD_TRUNC = 1
+    #PAYLOAD_TRUNC = 1
     PAYLOAD_SIZE = int(PAYLOAD_SIZE_DEFAULT * PAYLOAD_TRUNC)
     # -----
-    # PAYLOAD_SIZE = 7680
+    #PAYLOAD_SIZE = 7680
     PAYLOAD_SIZE_DEFAULT = 8192
+    PACKET_SIZE_DEFAULT_DOPPLER = 8192
     # -----
     PACKET_SIZE = PAYLOAD_START + PAYLOAD_SIZE
     print("PAYLOAD_SIZE_DEFAULT: " + str(PAYLOAD_SIZE_DEFAULT))
