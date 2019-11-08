@@ -18,6 +18,8 @@ from mpl_toolkits.mplot3d import art3d
 
 # ------------------------------------------------------------------------------------------- #
 
+current_milli_time = lambda: int(round(time.time() * 1000))
+
 def set_aspect_equal_3d(ax):  # axis have to be equal 
 
     xlim = ax.get_xlim3d()
@@ -58,15 +60,15 @@ PAYLOAD_SIZE_DEFAULT = 8192
 PAYLOAD_SIZE = int(PAYLOAD_SIZE_DEFAULT * PAYLOAD_TRUNC)
 PACKET_SIZE = PAYLOAD_START + PAYLOAD_SIZE
 PACKET_SIZE_DEFAULT = PAYLOAD_START + PAYLOAD_SIZE_DEFAULT
-PACKET_SIZE_DEFAULT_DOPPLER = PACKET_SIZE_DEFAULT + PAYLOAD_SIZE_DEFAULT
+PACKET_SIZE_DEFAULT_DOPPLER = PACKET_SIZE_DEFAULT #+ PAYLOAD_SIZE_DEFAULT
 
 # ----- Name of device ----- #
 
-device_name = '/dev/tty.usbmodem000000004'
+device_name = '/dev/ttyACM1'
 
 # ----- File name of log ----- #
 
-filename = "/Users/wcchung/OneDrive/Main/17699/TI SDK/Radar_boundary_detection/pymmw/app/DATA/binary-2019-07-02-16-57-54.dat"
+filename = "../DATA/binary-2019-07-01-22-18-58.dat"
 
 # ----- Magic Word ----- #
 magic_word = "0201040306050807"
@@ -442,7 +444,7 @@ def init():
 def update_plot_from_file(fig, ax, func, ground_truth):
     
     count = 0
-    ending = 5
+    ending = 100
     while True:
         global frame_count
         global bytevec
@@ -462,12 +464,17 @@ def update_plot_from_file(fig, ax, func, ground_truth):
 
             timer_start = time.time()
             func(datamap)
-            
-            print ("it took %fs for update_map()"%(time.time() - timer_start))
+
+            workingTime = time.time() - timer_start
+            print ("it took %fs for update_map()"%(workingTime))
+            #time.sleep(max((0.25-workingTime), 0))
+            print ("it took %fs for frame"%(time.time() - timer_start))
             print("[update_plot] len of datamap['azimuth']: " + str(len(datamap['azimuth'])))
             frame_count += 1
             print("[update] frame_count: " + str(frame_count))
         else:
+            msg = "ClientClosed:" + str(int(time.time() * 1000000))
+            func(datamap,msg)
             print("[update_plot] That's all. Ending in " + str(ending) + " seconds")
             time.sleep(1)
             ending -= 1

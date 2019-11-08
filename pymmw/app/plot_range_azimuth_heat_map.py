@@ -37,13 +37,18 @@ except ImportError:
     sys.exit(3)
 '''
 
-# ---------------------------------------------------------- #
-# ---------------------------------------------------------- #
-# ---------------------------------------------------------- #
+import socket
+
 # --- Constants --- #
 
 COLORMAP_MAX = 3000
 COLOR_THRESHOLD = 700
+
+port = "/tmp/radarPacket"
+s = socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+firstRun = True
+
+# ------------------------------------------------
 
 # colormap maximum
 cm_max = COLORMAP_MAX
@@ -104,13 +109,16 @@ def flush_ground_truth(frame_count, distance):
         print("[flush_ground_truth] skip!")
         return
     print("[flush_ground_truth] frame_count: %d distance: %f" % (frame_count, distance))
+    #print(os.path.basename(logpath).strip(".dat"))
     ground_truth_path = "DATA/ground_truth_" + os.path.basename(logpath).strip(".dat") + ".txt"
-
+    ground_truth_path = "DATA/ground_truth_fake.txt"
+    
     # if the script is running temporary to generate ground truth of temporary objects,
     # change the file name to temporary_gtound_truth
     if read_serial == 'temporary':
         ground_truth_path = ground_truth_path.replace('ground_truth', 'temporary_ground_truth')
-    
+
+    #ground_truth_path = "DATA/ground_truth_" + os.path.basename(logpath).strip(".dat") + ".txt"
     with open(ground_truth_path, "a") as f:
         data = str(frame_count) + ',' + ("%.5f" % distance) + '\n'
         f.write(data)
@@ -122,7 +130,8 @@ def flush_ground_truth(frame_count, distance):
 # ----- Read ground truth data from text file ----- #
 ground_truth = {}
 def read_ground_truth():
-    ground_truth_path = "DATA/ground_truth_" + os.path.basename(logpath).strip(".dat") + ".txt"
+    #ground_truth_path = "DATA/ground_truth_" + os.path.basename(logpath).strip(".dat") + ".txt"
+    ground_truth_path = "DATA/ground_truth_fake.txt"
     with open(ground_truth_path, "r") as f:
         for line in f:
             ground_truth[int(line.split(',')[0])] = float(line.split(',')[1])
@@ -169,6 +178,17 @@ def backward_update(event):
         return
     plot.frame_count -= 100
 
+def calculate_length(angle_span, distance):
+    return distance * 2 * math.pi * angle_span / 360.
+
+def generate_data_msg(length, distance):
+    return ','.join([str(length)[0:14],str(distance)[0:14]])
+
+def send_msg(msg):
+    print(msg)
+    s.send(msg.encode('ascii'))
+    
+# ------------------------------------------------ #
 # ---------------------------------------------------------- #
 # ---------------------------------------------------------- #
 # ---------------------------------------------------------- #
@@ -192,6 +212,10 @@ def generate_distance_index(distances):
 # make decision based on angle span
 # return the distance of the boundary
 def valid_boundary(contour_poly):
+    global firstRun
+    if firstRun:
+        s.connect(port)
+        firstRun = False
     origin = (199.5 , 0)
     distance_max = 0.0      # unit is index
     distance_min = 1000.0   # unit is index
@@ -233,7 +257,7 @@ def valid_boundary(contour_poly):
         return False , distance, angle_span, velocity
 
     # objects within 80 cm are discarded, since the housing is giving near-field noise.
-    if distance < 0.8:
+    if distance < 0.5555555555555555555555555555555555555555555555555555555:
         return False , distance, angle_span, velocity
     
     return True , distance, angle_span, velocity
@@ -379,17 +403,25 @@ def contour_rectangle(zi):
     boundRect = [None]*len(contours)
     boundary_or_not = [None]*len(contours)
     distance = [None]*len(contours)
-    angle_span = [None]*len(contours)
+    length = [None]*len(contours)
     velocity = [None]*len(contours)
     for i, c in enumerate(contours):
         contours_poly[i] = cv.approxPolyDP(c, 0.01, True)
         boundRect[i] = cv.boundingRect(contours_poly[i])
         # Karun get data here!
-        boundary_or_not[i], distance[i], angle_span[i], velocity[i] = valid_boundary(contours_poly[i])
+        boundary_or_not[i], distance[i], angle_span, velocity[i] = valid_boundary(contours_poly[i])
+        length[i] = calculate_length(distance[i], angle_span)
         # Karun get data here!
+    
+    if any(boundary_or_not):
+        send_msg("Start:" + str(int(time.time() * 1000000)) + "Len:" + "{0:0=3d}".format(np.sum(boundary_or_not)+1))
+    else:
+        send_msg("Start:" + str(int(time.time() * 1000000)) + "Len:000")
+    boundaryIndices = np.where(boundary_or_not)[0]
+    [send_msg(generate_data_msg(y, x)) for y, x in zip(np.take(length, boundaryIndices).tolist(), np.take(distance, boundaryIndices).tolist())]
 
     boundary_or_not = noise_removal(boundary_or_not, distance, contours_poly, zi_copy)
-
+    
     drawing = np.zeros((zi_copy.shape[0], zi_copy.shape[1], 4), dtype=np.uint8)
     labels = np.zeros((zi_copy.shape[0], zi_copy.shape[1], 4), dtype=np.uint8)
 
@@ -416,9 +448,11 @@ def contour_rectangle(zi):
             
             # Karun get data here!
             ret_dist = distance[i]
-            ret_angle_span = angle_span[i]
+            ret_length = length[i]
             ret_velocity = velocity[i]
             # Karun get data here!
+            send_msg(generate_data_msg(length[i], distance[i]))
+            send_msg("PacketFinish:" + str(int(time.time() * 1000000)))
 
     global ret_dist_rolling
     if len(tracker_box) != 0:
@@ -502,8 +536,11 @@ def update_ground_truth():
 # ---------------------------------------------------------- #
 # ---------------------------------------------------------- #
 # ----- Main function for updating the plot ----- #
-def update(data):
-
+def update(data, msg=''):
+    if msg is not '':
+        send_msg(msg)
+        return
+    
     global bshowcm_max, cm_max, threshold
     bshowcm_max.label.set_text("CM_MAX: " + str(int(cm_max)) + "\nThreshold: " + str(int(threshold))
                         + "\nAngle Bins: " + str(angle_bins)
@@ -735,8 +772,8 @@ if __name__ == "__main__":
         fig.canvas.mpl_connect('button_press_event', onclick)
         fig.canvas.mpl_connect('axes_enter_event', enter_axes)
         fig.canvas.mpl_connect('axes_leave_event', leave_axes)
-        replay_plot(fig, ax, update, logpath, True)
-
+        replay_plot(fig, ax, update, logpath, False)
+    s.close()
     ''' 
     except Exception:
         sys.exit(2)
