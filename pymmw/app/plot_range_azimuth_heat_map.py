@@ -45,6 +45,8 @@ COLORMAP_MAX = 3000
 COLOR_THRESHOLD = 700
 
 port = "/tmp/radarPacket"
+server_address = ('localhost', 17699)
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s = socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
 firstRun = True
 
@@ -186,7 +188,9 @@ def generate_data_msg(length, distance):
 
 def send_msg(msg):
     print(msg)
-    s.send(msg.encode('ascii'))
+    #s.send(msg.encode('ascii'))
+    sock.send(msg.encode('ascii'))
+    sock.send("\n".encode('ascii'))
     
 # ------------------------------------------------ #
 # ---------------------------------------------------------- #
@@ -214,7 +218,8 @@ def generate_distance_index(distances):
 def valid_boundary(contour_poly):
     global firstRun
     if firstRun:
-        s.connect(port)
+        #s.connect(port)
+        sock.connect(server_address)
         firstRun = False
     origin = (199.5 , 0)
     distance_max = 0.0      # unit is index
@@ -414,10 +419,11 @@ def contour_rectangle(zi):
         # Karun get data here!
     
     if any(boundary_or_not):
-        send_msg("Start:" + str(int(time.time() * 1000000)) + "Len:" + "{0:0=3d}".format(np.sum(boundary_or_not)+1))
+        send_msg("Start:" + str(int(time.time() * 1000000)) + " Len:" + "{0:0=3d}".format(np.sum(boundary_or_not)+1))
     else:
-        send_msg("Start:" + str(int(time.time() * 1000000)) + "Len:000")
+        send_msg("Start:" + str(int(time.time() * 1000000)) + " Len:000")
     boundaryIndices = np.where(boundary_or_not)[0]
+    send_msg("Possible results:")
     [send_msg(generate_data_msg(y, x)) for y, x in zip(np.take(length, boundaryIndices).tolist(), np.take(distance, boundaryIndices).tolist())]
 
     boundary_or_not = noise_removal(boundary_or_not, distance, contours_poly, zi_copy)
@@ -451,6 +457,7 @@ def contour_rectangle(zi):
             ret_length = length[i]
             ret_velocity = velocity[i]
             # Karun get data here!
+            send_msg("Most possible result:")
             send_msg(generate_data_msg(length[i], distance[i]))
             send_msg("PacketFinish:" + str(int(time.time() * 1000000)))
 
