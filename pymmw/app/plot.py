@@ -64,8 +64,8 @@ PACKET_SIZE_DEFAULT_DOPPLER = PACKET_SIZE_DEFAULT + PAYLOAD_SIZE_DEFAULT
 
 # ----- Name of device ----- #
 
-device_name = '/dev/tty.usbmodem000000004'
-#device_name = '/dev/ttyACM1'
+#device_name = '/dev/tty.usbmodem000000004'
+device_name = '/dev/ttyACM1'
 
 # ----- File name of log ----- #
 
@@ -451,14 +451,14 @@ def init():
     filename = filename.replace("binary", "mapping")
     filename = filename.replace(".dat", ".txt")
     print("mapping filename: " + filename)
-    with open(filename) as fp:
-        line = fp.readline()
-        while line:
-            line = line.rstrip()
-            tokens = line.split(",")
-            mapping_table[tokens[0]] = tokens[1]
-            line = fp.readline()
-    fp.close()
+    # with open(filename) as fp:
+    #     line = fp.readline()
+    #     while line:
+    #         line = line.rstrip()
+    #         tokens = line.split(",")
+    #         mapping_table[tokens[0]] = tokens[1]
+    #         line = fp.readline()
+    # fp.close()
 
 def get_timestamp(frame_count):
     try:

@@ -4,8 +4,8 @@ import serial
 
 cmds = []
 
-device_name = '/dev/tty.usbmodem000000001'
-#device_name = '/dev/ttyACM0'
+#device_name = '/dev/tty.usbmodem000000001'
+device_name = '/dev/ttyACM0'
 #115200, 921600
 def send_to_serial():
     print("sleep 5 second for serial")
@@ -18,13 +18,13 @@ def send_to_serial():
         print(device.name)
         for line in cmds:
             line = line + '\n'
-            for i in range(1,11):
+            for i in range(1,30):
                 print("=== [send] command: " + line.rstrip() + " " + str(i) + " times")
                 device.write(line.encode())
                 res_count = 0
                 res_string = ""
                 for res in device:
-                    res_string = res.decode()
+                    res_string = res.decode('utf-8', errors='replace')
                     res_string = res_string.rstrip()
                     print(res_string)
                     res_count += 1
