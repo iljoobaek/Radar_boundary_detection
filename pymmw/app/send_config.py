@@ -4,7 +4,8 @@ import serial
 
 cmds = []
 
-device_name = '/dev/ttyACM0'
+device_name = '/dev/tty.usbmodem000000001'
+#device_name = '/dev/ttyACM0'
 #115200, 921600
 def send_to_serial():
     print("sleep 5 second for serial")

@@ -560,11 +560,11 @@ def update(data, msg=''):
                         + "\nAngle Bins: " + str(angle_bins)
                             + "\nScope: " + str(scope))
     if not 'azimuth' in data or len(data['azimuth']) != range_bins * tx_azimuth_antennas * rx_antennas * 2:
-        #print("azimuth fail! " + str(len(data['azimuth'])))
+        print("azimuth fail! " + str(len(data['azimuth'])))
         return
     
     if not 'doppler' in data or len(data['doppler']) != range_bins * doppler_bins:
-        #print("doppler fail! " + str(len(data['doppler'])))
+        print("doppler fail! " + str(len(data['doppler'])))
         return
     
     timer_start = time.time()

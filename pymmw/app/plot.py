@@ -64,7 +64,8 @@ PACKET_SIZE_DEFAULT_DOPPLER = PACKET_SIZE_DEFAULT #+ PAYLOAD_SIZE_DEFAULT
 
 # ----- Name of device ----- #
 
-device_name = '/dev/ttyACM1'
+device_name = '/dev/tty.usbmodem000000004'
+#device_name = '/dev/ttyACM1'
 
 # ----- File name of log ----- #
 
@@ -217,7 +218,7 @@ def write_byte_to_log(binary_data, timestamp):
             f.write(byte)
         f.close()
     global frame_count
-    filename = "DATA/binary-mapping-" + timestamp + ".txt"
+    filename = "DATA/mapping-" + timestamp + ".txt"
     with open(filename, "a") as f:
         f.write(str(frame_count+1) + "," + str(int(time.time() * 1000000)) + "\n")
         f.close()
