@@ -217,7 +217,7 @@ def write_byte_to_log(binary_data, timestamp):
     global frame_count
     filename = "DATA/binary-mapping-" + timestamp + ".txt"
     with open(filename, "a") as f:
-        f.write(str(frame_count+1) + "," + str(timestamp))
+        f.write(str(frame_count+1) + "," + str(int(time.time() * 1000000)))
         f.close()
 
 def write_int_to_log(integer_data, timestamp):
