@@ -188,9 +188,9 @@ def generate_data_msg(length, distance):
 
 def send_msg(msg):
     print(msg)
-    #s.send(msg.encode('ascii'))
-    sock.send(msg.encode('ascii'))
-    sock.send("\n".encode('ascii'))
+    s.send(msg.encode('ascii'))
+    #sock.send(msg.encode('ascii'))
+    #sock.send("\n".encode('ascii'))
     
 # ------------------------------------------------ #
 # ---------------------------------------------------------- #
@@ -419,11 +419,11 @@ def contour_rectangle(zi):
         # Karun get data here!
     
     if any(boundary_or_not):
-        send_msg("Start:" + str(int(time.time() * 1000000)) + " Len:" + "{0:0=3d}".format(np.sum(boundary_or_not)+1))
+        send_msg("Start:" + str(int(time.time() * 1000000)) + "Len:" + "{0:0=3d}".format(np.sum(boundary_or_not)+1))
     else:
-        send_msg("Start:" + str(int(time.time() * 1000000)) + " Len:000")
+        send_msg("Start:" + str(int(time.time() * 1000000)) + "Len:000")
     boundaryIndices = np.where(boundary_or_not)[0]
-    send_msg("Possible results:")
+    #send_msg("Possible results:")
     [send_msg(generate_data_msg(y, x)) for y, x in zip(np.take(length, boundaryIndices).tolist(), np.take(distance, boundaryIndices).tolist())]
 
     boundary_or_not = noise_removal(boundary_or_not, distance, contours_poly, zi_copy)
@@ -457,7 +457,7 @@ def contour_rectangle(zi):
             ret_length = length[i]
             ret_velocity = velocity[i]
             # Karun get data here!
-            send_msg("Most possible result:")
+            #send_msg("Most possible result:")
             send_msg(generate_data_msg(length[i], distance[i]))
             send_msg("PacketFinish:" + str(int(time.time() * 1000000)))
 
