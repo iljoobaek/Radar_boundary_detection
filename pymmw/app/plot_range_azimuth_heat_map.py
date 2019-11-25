@@ -188,7 +188,7 @@ def generate_data_msg(length, distance):
 
 def send_msg(msg):
     print(msg)
-    s.send(msg.encode('ascii'))
+    #s.send(msg.encode('ascii'))
     #sock.send(msg.encode('ascii'))
     #sock.send("\n".encode('ascii'))
     
@@ -219,7 +219,7 @@ def valid_boundary(contour_poly):
     global firstRun
     if firstRun:
         #s.connect(port)
-        sock.connect(server_address)
+        #sock.connect(server_address)
         firstRun = False
     origin = (199.5 , 0)
     distance_max = 0.0      # unit is index
@@ -423,9 +423,9 @@ def contour_rectangle(zi):
         timestamp = get_timestamp(frame_count)
 
     if any(boundary_or_not):
-        send_msg("Start:" + timestamp + "Len:" + "{0:0=3d}".format(np.sum(boundary_or_not)+1))
+        send_msg("Start:" + str(timestamp) + "Len:" + "{0:0=3d}".format(np.sum(boundary_or_not)+1))
     else:
-        send_msg("Start:" + timestamp + "Len:000")
+        send_msg("Start:" + str(timestamp) + "Len:000")
     boundaryIndices = np.where(boundary_or_not)[0]
     #send_msg("Possible results:")
     [send_msg(generate_data_msg(y, x)) for y, x in zip(np.take(length, boundaryIndices).tolist(), np.take(distance, boundaryIndices).tolist())]
@@ -466,7 +466,7 @@ def contour_rectangle(zi):
             timestamp = str(int(time.time() * 1000000))
             if read_serial == 'read' or read_serial == 'test':
                 timestamp = get_timestamp(frame_count)
-            send_msg("PacketFinish:" + timestamp)
+            send_msg("PacketFinish:" + str(timestamp))
 
     global ret_dist_rolling
     if len(tracker_box) != 0:

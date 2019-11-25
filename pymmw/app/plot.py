@@ -60,7 +60,7 @@ PAYLOAD_SIZE_DEFAULT = 8192
 PAYLOAD_SIZE = int(PAYLOAD_SIZE_DEFAULT * PAYLOAD_TRUNC)
 PACKET_SIZE = PAYLOAD_START + PAYLOAD_SIZE
 PACKET_SIZE_DEFAULT = PAYLOAD_START + PAYLOAD_SIZE_DEFAULT
-PACKET_SIZE_DEFAULT_DOPPLER = PACKET_SIZE_DEFAULT #+ PAYLOAD_SIZE_DEFAULT
+PACKET_SIZE_DEFAULT_DOPPLER = PACKET_SIZE_DEFAULT + PAYLOAD_SIZE_DEFAULT
 
 # ----- Name of device ----- #
 
@@ -440,7 +440,7 @@ def bytes_from_log(filename, chunksize=PACKET_SIZE-8):
 # ----- Thread: Replay plot ----- #
 # ----- prepare the bytevec ----- #
 def init():
-    global bytevec
+    global bytevec,filename
     for b in bytes_from_log(filename, PACKET_SIZE_DEFAULT_DOPPLER - 8):
         bytevec.append(bytes([b]))
 
@@ -448,7 +448,9 @@ def init():
     print("type of element: " + str(type(bytevec[0])))
 
     # flush the history timestamp into mapping table
-    filename.replace("binary", "mapping")
+    filename = filename.replace("binary", "mapping")
+    filename = filename.replace(".dat", ".txt")
+    print("mapping filename: " + filename)
     with open(filename) as fp:
         line = fp.readline()
         while line:
@@ -459,14 +461,17 @@ def init():
     fp.close()
 
 def get_timestamp(frame_count):
-    return mapping_table[frame_count]
+    try:
+        return mapping_table[frame_count]
+    except:
+        return 0
 
 # ----- Thread: Replay plot ----- #
 # ----- Update the plot from log ----- #
 def update_plot_from_file(fig, ax, func, ground_truth):
     
     count = 0
-    ending = 100
+    ending = 10
     while True:
         global frame_count
         global bytevec
