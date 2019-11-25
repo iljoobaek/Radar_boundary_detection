@@ -418,10 +418,14 @@ def contour_rectangle(zi):
         length[i] = calculate_length(distance[i], angle_span)
         # Karun get data here!
     
+    timestamp = str(int(time.time() * 1000000))
+    if read_serial == 'read' or read_serial == 'test':
+        timestamp = get_timestamp(frame_count)
+
     if any(boundary_or_not):
-        send_msg("Start:" + str(int(time.time() * 1000000)) + "Len:" + "{0:0=3d}".format(np.sum(boundary_or_not)+1))
+        send_msg("Start:" + timestamp + "Len:" + "{0:0=3d}".format(np.sum(boundary_or_not)+1))
     else:
-        send_msg("Start:" + str(int(time.time() * 1000000)) + "Len:000")
+        send_msg("Start:" + timestamp + "Len:000")
     boundaryIndices = np.where(boundary_or_not)[0]
     #send_msg("Possible results:")
     [send_msg(generate_data_msg(y, x)) for y, x in zip(np.take(length, boundaryIndices).tolist(), np.take(distance, boundaryIndices).tolist())]
@@ -459,7 +463,10 @@ def contour_rectangle(zi):
             # Karun get data here!
             #send_msg("Most possible result:")
             send_msg(generate_data_msg(length[i], distance[i]))
-            send_msg("PacketFinish:" + str(int(time.time() * 1000000)))
+            timestamp = str(int(time.time() * 1000000))
+            if read_serial == 'read' or read_serial == 'test':
+                timestamp = get_timestamp(frame_count)
+            send_msg("PacketFinish:" + timestamp)
 
     global ret_dist_rolling
     if len(tracker_box) != 0:

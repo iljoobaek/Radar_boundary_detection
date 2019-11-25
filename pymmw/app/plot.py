@@ -98,7 +98,9 @@ frame_count = 0
 # bytevec: store all of the packet parsed.
 # datavec: store all the phasor tuples. Every real & imaginary part consists of two bytes.
 # datamap: to meet the requirement of update() in plot_range_azimuth_heat_map.py
+# mapping_table: maps frame count to history timestamp
 
+mapping_table = {}
 bytevec = []
 datavec = []
 dopplervec = []
@@ -217,7 +219,7 @@ def write_byte_to_log(binary_data, timestamp):
     global frame_count
     filename = "DATA/binary-mapping-" + timestamp + ".txt"
     with open(filename, "a") as f:
-        f.write(str(frame_count+1) + "," + str(int(time.time() * 1000000)))
+        f.write(str(frame_count+1) + "," + str(int(time.time() * 1000000)) + "\n")
         f.close()
 
 def write_int_to_log(integer_data, timestamp):
@@ -443,6 +445,20 @@ def init():
 
     print("len of bytevec: " + str(len(bytevec)))
     print("type of element: " + str(type(bytevec[0])))
+
+    # flush the history timestamp into mapping table
+    filename.replace("binary", "mapping")
+    with open(filename) as fp:
+        line = fp.readline()
+        while line:
+            line = line.rstrip()
+            tokens = line.split(",")
+            mapping_table[tokens[0]] = tokens[1]
+            line = fp.readline()
+    fp.close()
+
+def get_timestamp(frame_count):
+    return mapping_table[frame_count]
 
 # ----- Thread: Replay plot ----- #
 # ----- Update the plot from log ----- #
